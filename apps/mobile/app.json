@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "AllergyDetect",
+    "slug": "allergydetect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "allergydetect",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0F1E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.allergydetect.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "AllergyDetect uses the camera to scan food and barcodes for allergen analysis.",
+        "NSHealthShareUsageDescription": "AllergyDetect reads heart-rate and HRV data to correlate reactions with your meals."
+      }
+    },
+    "android": {
+      "package": "app.allergydetect.mobile",
+      "permissions": ["CAMERA", "VIBRATE"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow AllergyDetect to use the camera to scan food." }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "http://localhost:8000/api/v1"
+    }
+  }
+}
