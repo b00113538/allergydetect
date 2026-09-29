@@ -7,3 +7,5 @@ DerivedData/
 *.xcuserstate
 firebase/.firebaserc
 firebase/.firebase/
+.spm/
+xcodebuild.log
