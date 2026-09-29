@@ -27,8 +27,24 @@ targets:
     platform: iOS
     sources:
       - path: Nouri
-      - path: GoogleService-Info.plist
-        optional: true
+    # GoogleService-Info.plist is per-environment and not committed. Copy it into the bundle only
+    # when present; without it the app runs in demo mode (see AppEnvironment.isFirebaseConfigured).
+    postCompileScripts:
+      - name: Copy Firebase config (if present)
+        script: |
+          SRC="${PROJECT_DIR}/GoogleService-Info.plist"
+          DEST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "$DEST"
+            echo "Bundled GoogleService-Info.plist"
+          else
+            rm -f "$DEST"
+            echo "No GoogleService-Info.plist - building in demo mode"
+          fi
+        inputFiles: []
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist
+        basedOnDependencyAnalysis: false
     dependencies:
       - package: Firebase
         product: FirebaseAuth
@@ -56,6 +72,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.nouri.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # The Firebase config copy script reads a file outside the declared inputs.
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
 
   NouriTests:
     type: bundle.unit-test

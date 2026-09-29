@@ -51,7 +51,7 @@ way to put it on a phone for a pitch.
 1. Create a Firebase project and enable **Authentication → Email/Password**, **Firestore**, **Storage**,
    **Functions** (Blaze plan, needed for outbound calls to the Claude API) and **Hosting**.
 2. Add an iOS app with bundle id `com.nouri.app`, download `GoogleService-Info.plist` into
-   `apps/nouri-ios/`, and re-run `xcodegen generate`. The app detects the file and switches out of demo mode.
+   `apps/nouri-ios/` (a build phase copies it into the app when present; it is git-ignored). The app detects the file and switches out of demo mode.
 3. Deploy the backend:
    ```bash
    cd apps/nouri-ios/firebase
