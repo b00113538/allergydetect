@@ -29,8 +29,11 @@ apps/nouri-ios/
   NouriTests/                 pattern detection (food + skin), allergen DB, blood work, SQLite round-trip tests
   firebase/
     firestore.rules, storage.rules, firebase.json
-    functions/                analyzeMealPhoto + extractBloodworkPanel callables (TypeScript, Anthropic SDK)
+    functions/                analyzeMealPhoto, extractBloodworkPanel, deleteAccount callables;
+                              sendScheduledPushes hourly job (TypeScript)
     hosting/d/index.html      Dine Code scan page (no app install needed)
+    hosting/privacy, support  privacy policy + support pages (App Store URLs)
+  AppStore/                   listing copy, privacy label, review notes, release checklist, ExportOptions
 ```
 
 ## Run it
@@ -66,7 +69,7 @@ way to put it on a phone for a pitch.
    ```
 4. Set `NouriDineCodeBaseURL` in `project.yml` to `https://<project-id>.web.app/d/` and regenerate.
 5. Push notifications need a paid Apple Developer account:
-   - Set `DEVELOPMENT_TEAM` in `project.yml`. The `aps-environment` entitlement is already declared; switch it to `production` for TestFlight.
+   - Set `DEVELOPMENT_TEAM` in `project.yml`. The `aps-environment` entitlement is already declared, and Xcode switches it to production when exporting for TestFlight.
    - Create an APNs auth key and upload it to Firebase (step 3).
    - Test on a real device.
    - Post-meal check-ins work without any of this.
@@ -141,6 +144,21 @@ Food results of class 2 or higher are added to the Dine Code as "Positive blood 
       opens meal logging.
   - Dead tokens are deleted when FCM rejects them. Sign-out deletes the device document and the FCM token.
   - Users control all of this in Profile → Notifications (on/off toggles and a reminder time).
+
+## TestFlight and the App Store
+
+`AppStore/README.md` contains the listing copy, the privacy-label answers, the notes for App Review, screenshot
+guidance and the release checklist. Once the secrets are set, **Actions → Nouri TestFlight → Run workflow** archives
+a Release build, signs it, and uploads it to TestFlight.
+
+Built in for review:
+- in-app **account deletion**, backed by the `deleteAccount` function
+- a privacy manifest (`PrivacyInfo.xcprivacy`)
+- privacy and support pages on Firebase Hosting (`/privacy`, `/support`)
+- a medical disclaimer on the welcome screen and in Profile
+- an app icon
+- `ITSAppUsesNonExemptEncryption = NO`
+- iPhone-only targeting
 
 ## Tests
 

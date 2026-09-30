@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var knownGroups: Set<AllergenGroup> = []
     @State private var otherConditions = ""
     @State private var confirmSignOut = false
+    @State private var confirmDelete = false
+    @State private var isDeleting = false
     @State private var push = PushPreferences()
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
     @Environment(\.scenePhase) private var scenePhase
@@ -42,10 +44,30 @@ struct SettingsView: View {
                         Button("Load sample history") { app.loadSampleData() }
                     }
                 }
+                Section("About") {
+                    Link("Privacy policy", destination: AppEnvironment.webPage("privacy"))
+                    Link("Help & support", destination: AppEnvironment.webPage("support"))
+                    LabeledContent("Version", value: Self.versionString)
+                    Text("Nouri shows patterns in what you log. It isn't a medical device and doesn't diagnose allergies — talk to a clinician before changing your diet or treatment.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.nouriTextSecondary)
+                }
                 Section {
                     Button("Sign out", role: .destructive) { confirmSignOut = true }
                 } footer: {
                     Text(app.isDemoMode ? "Signing out deletes all data on this device." : "Your data stays in your account and syncs back when you sign in.")
+                }
+                Section {
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        if isDeleting {
+                            HStack { ProgressView(); Text("Deleting…") }
+                        } else {
+                            Text("Delete account")
+                        }
+                    }
+                    .disabled(isDeleting)
+                } footer: {
+                    Text("Permanently deletes your account and everything in it — meals, symptoms, skin logs, blood work, photos and Dine Codes. This can't be undone.")
                 }
             }
             .navigationTitle("Profile")
@@ -58,6 +80,18 @@ struct SettingsView: View {
                     }
                 }
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+            .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete account and all data", role: .destructive) {
+                    Task {
+                        isDeleting = true
+                        let deleted = await app.deleteAccount()
+                        isDeleting = false
+                        if deleted { dismiss() }
+                    }
+                }
+            } message: {
+                Text("Everything you've logged will be erased from this device and from Nouri's servers. Any Dine Code you've shared will stop working.")
             }
             .confirmationDialog("Sign out?", isPresented: $confirmSignOut) {
                 Button("Sign out", role: .destructive) {
@@ -120,6 +154,13 @@ struct SettingsView: View {
                  ? "A check-in a few hours after each meal, always. The evening reminder only comes on days you haven't logged anything; on Sundays it's replaced by your weekly summary."
                  : "A check-in a few hours after each meal. Evening reminders and weekly summaries need Firebase (demo mode is on-device only).")
         }
+    }
+
+    private static var versionString: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "–"
+        let build = info?["CFBundleVersion"] as? String ?? "–"
+        return "\(version) (\(build))"
     }
 
     private func refreshNotificationStatus() async {

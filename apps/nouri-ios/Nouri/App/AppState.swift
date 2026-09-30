@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// Single app-wide store. Writes go to the local database first (offline-first), the UI updates
 /// immediately, and Firestore sync runs in the background when Firebase is configured.
@@ -147,8 +148,31 @@ final class AppState: ObservableObject {
         }
         if firebase != nil { await PushService.shared.reset() }
         try? firebase?.signOut()
+        clearLocalSession()
+    }
+
+    /// Deletes the account and all of its data, on the server and on this device. In demo mode there
+    /// is nothing on a server, so this is the same as signing out.
+    func deleteAccount() async -> Bool {
+        if let firebase {
+            do {
+                try await firebase.deleteAccount()
+            } catch {
+                lastError = "Your account couldn't be deleted: \(error.localizedDescription)"
+                return false
+            }
+            await PushService.shared.reset()
+        }
+        clearLocalSession()
+        return true
+    }
+
+    private func clearLocalSession() {
         UserDefaults.standard.removeObject(forKey: Self.localUserKey)
         try? database.wipeAll()
+        PhotoStore.deleteAll()
+        DocumentStore.deleteAll()
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         user = nil
         meals = []
         symptoms = []

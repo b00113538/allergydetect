@@ -2,6 +2,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
+import FirebaseFunctions
 
 /// Auth, Firestore sync and Cloud Storage uploads.
 ///
@@ -37,6 +38,15 @@ final class FirebaseService {
 
     func signOut() throws {
         try auth.signOut()
+    }
+
+    /// Permanently deletes the account server-side (`deleteAccount` callable: Firestore data, public
+    /// Dine Codes, Storage files, then the Auth user), then clears the local auth session.
+    func deleteAccount() async throws {
+        let callable = Functions.functions().httpsCallable("deleteAccount")
+        callable.timeoutInterval = 300
+        _ = try await callable.call()
+        try? auth.signOut()
     }
 
     // MARK: Documents

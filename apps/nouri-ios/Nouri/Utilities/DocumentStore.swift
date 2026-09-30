@@ -24,4 +24,9 @@ enum DocumentStore {
     static func delete(named name: String) {
         try? FileManager.default.removeItem(at: url(named: name))
     }
+
+    /// Removes every stored report (sign-out / account deletion).
+    static func deleteAll() {
+        try? FileManager.default.removeItem(at: directory)
+    }
 }

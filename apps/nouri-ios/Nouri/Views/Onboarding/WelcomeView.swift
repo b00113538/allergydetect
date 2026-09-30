@@ -28,6 +28,13 @@ struct WelcomeView: View {
                 } else {
                     accountCard
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Nouri shows patterns in what you log — it isn't a medical device and doesn't diagnose allergies.")
+                    Link("Privacy policy", destination: AppEnvironment.webPage("privacy"))
+                }
+                .font(.footnote)
+                .foregroundStyle(Color.nouriTextSecondary)
             }
             .padding(24)
         }

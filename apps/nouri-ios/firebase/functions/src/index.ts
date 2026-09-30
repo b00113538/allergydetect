@@ -8,6 +8,8 @@ const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 
 // Push notifications: evening reminder + weekly summary (see push.ts).
 export { sendScheduledPushes } from "./push";
+// In-app account deletion (App Store guideline 5.1.1(v)); see account.ts.
+export { deleteAccount } from "./account";
 
 const MODEL = "claude-opus-5-5";
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;

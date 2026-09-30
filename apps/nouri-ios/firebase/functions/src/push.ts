@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "firebase-admin/app";
+import "./admin";
 import { getFirestore, Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -13,8 +13,6 @@ import {
   startOfLocalDay,
   weeklySummaryMessage,
 } from "./pushLogic";
-
-if (getApps().length === 0) initializeApp();
 
 const DAY_MS = 24 * 3600 * 1000;
 
