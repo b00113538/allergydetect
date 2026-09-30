@@ -10,6 +10,7 @@ name: Nouri TestFlight
 #   GOOGLE_SERVICE_INFO_PLIST_B64   base64 of GoogleService-Info.plist (`base64 -i GoogleService-Info.plist | pbcopy`)
 # Optional repository variable:
 #   NOURI_BUNDLE_ID                 overrides PRODUCT_BUNDLE_IDENTIFIER from project.yml
+#   NOURI_REVIEWER_EMAIL            App Review demo account allowed to load sample history
 
 on:
   workflow_dispatch:
@@ -78,11 +79,13 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           BUNDLE_ID: ${{ vars.NOURI_BUNDLE_ID }}
+          REVIEWER_EMAIL: ${{ vars.NOURI_REVIEWER_EMAIL }}
           MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
         run: |
           set -o pipefail
           extra=()
           [ -n "$BUNDLE_ID" ] && extra+=("PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID")
+          [ -n "$REVIEWER_EMAIL" ] && extra+=("NOURI_REVIEWER_EMAIL=$REVIEWER_EMAIL")
           [ -n "$MARKETING_VERSION_INPUT" ] && extra+=("MARKETING_VERSION=$MARKETING_VERSION_INPUT")
           xcodebuild archive \
             -project Nouri.xcodeproj \

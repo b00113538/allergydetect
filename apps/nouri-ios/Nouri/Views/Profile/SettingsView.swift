@@ -39,9 +39,15 @@ struct SettingsView: View {
                     Text("These are always included on your Dine Code as confirmed allergies.")
                 }
                 notificationsSection
-                if app.isDemoMode {
-                    Section("Demo") {
+                if app.canLoadSampleData {
+                    Section {
                         Button("Load sample history") { app.loadSampleData() }
+                    } header: {
+                        Text(app.isDemoMode ? "Demo" : "App Review account")
+                    } footer: {
+                        if !app.isDemoMode {
+                            Text("Only shown for the reviewer account, while it's empty. Adds three weeks of meals, symptoms, skin logs and an allergy panel, then syncs them.")
+                        }
                     }
                 }
                 Section("About") {

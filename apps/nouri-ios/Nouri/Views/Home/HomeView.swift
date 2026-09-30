@@ -106,7 +106,7 @@ struct HomeView: View {
                 Text("Log meals and how you feel for a week or two. Nouri flags an ingredient once it shows up in 3+ meals that were followed by symptoms most of the time.")
                     .font(.footnote)
                     .foregroundStyle(Color.nouriTextSecondary)
-                if app.isDemoMode && app.meals.isEmpty {
+                if app.canLoadSampleData {
                     Button("Load sample history") { app.loadSampleData() }
                         .buttonStyle(.nouriSecondary)
                 }
