@@ -28,6 +28,11 @@ enum PhotoStore {
     static func delete(named name: String) {
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
     }
+
+    /// Removes every stored photo (sign-out / account deletion).
+    static func deleteAll() {
+        try? FileManager.default.removeItem(at: directory)
+    }
 }
 
 extension UIImage {

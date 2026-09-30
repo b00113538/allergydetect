@@ -9,7 +9,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
+    # Overridden by the TestFlight workflow with the run number, so every upload is unique.
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""   # set your Apple team ID
 
@@ -61,7 +62,7 @@ targets:
     entitlements:
       path: Nouri/Resources/Nouri.entitlements
       properties:
-        # Switch to "production" for TestFlight / App Store builds.
+        # Xcode re-signs with "production" automatically when exporting for TestFlight / App Store.
         aps-environment: development
     info:
       path: Nouri/Resources/Info.plist
@@ -76,9 +77,14 @@ targets:
         NouriDineCodeBaseURL: https://nouri-app.web.app/d/
         # The APNs token is handed to FCM explicitly in AppDelegate (see PushService).
         FirebaseAppDelegateProxyEnabled: false
+        # Only standard HTTPS/TLS is used, which is exempt — skips the export-compliance prompt on every upload.
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.health-fitness
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nouri.app
+        # iPhone only for v1 (an iPad build would also need iPad screenshots and layouts).
+        TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # The Firebase config copy script reads a file outside the declared inputs.

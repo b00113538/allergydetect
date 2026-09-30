@@ -1,0 +1,137 @@
+name: Nouri TestFlight
+
+# Manual only: Actions → "Nouri TestFlight" → Run workflow. Archives a Release build, signs it with
+# Xcode's automatic (cloud) signing via an App Store Connect API key, and uploads it to TestFlight.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   APPLE_TEAM_ID                   10-character team ID (developer.apple.com → Membership details)
+#   ASC_KEY_ID, ASC_ISSUER_ID       App Store Connect → Users and Access → Integrations → Team keys
+#   ASC_KEY_P8                      contents of that key's AuthKey_XXXX.p8 file (Admin role, for cloud signing)
+#   GOOGLE_SERVICE_INFO_PLIST_B64   base64 of GoogleService-Info.plist (`base64 -i GoogleService-Info.plist | pbcopy`)
+# Optional repository variable:
+#   NOURI_BUNDLE_ID                 overrides PRODUCT_BUNDLE_IDENTIFIER from project.yml
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "Version shown in TestFlight (leave empty to use project.yml)"
+        required: false
+
+concurrency:
+  group: nouri-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Archive & upload
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/nouri-ios
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_B64 }}
+        run: |
+          missing=0
+          for name in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 PLIST; do
+            if [ -z "${!name}" ]; then echo "::error::Missing secret for $name (see the header of this workflow)"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Write Firebase config and API key
+        env:
+          PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_B64 }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          echo "$PLIST" | base64 --decode > GoogleService-Info.plist
+          plutil -lint GoogleService-Info.plist
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/nouri-ios/.spm
+          key: spm-${{ runner.os }}-${{ hashFiles('apps/nouri-ios/project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          BUNDLE_ID: ${{ vars.NOURI_BUNDLE_ID }}
+          MARKETING_VERSION_INPUT: ${{ inputs.marketing_version }}
+        run: |
+          set -o pipefail
+          extra=()
+          [ -n "$BUNDLE_ID" ] && extra+=("PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID")
+          [ -n "$MARKETING_VERSION_INPUT" ] && extra+=("MARKETING_VERSION=$MARKETING_VERSION_INPUT")
+          xcodebuild archive \
+            -project Nouri.xcodeproj \
+            -scheme Nouri \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Nouri.xcarchive" \
+            -clonedSourcePackagesDirPath .spm \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            "${extra[@]}" \
+            | tee archive.log | grep -E "error:|warning: .*Nouri/|\*\* ARCHIVE"
+
+      - name: Upload to TestFlight
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          sed "s/__TEAM_ID__/$TEAM_ID/" AppStore/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Nouri.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            | tee export.log
+          echo "### Uploaded build $BUILD_NUMBER to App Store Connect" >> "$GITHUB_STEP_SUMMARY"
+          echo "It appears in TestFlight after Apple finishes processing (usually 5–30 minutes)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove secrets from disk
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc" GoogleService-Info.plist
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-logs
+          path: |
+            apps/nouri-ios/archive.log
+            apps/nouri-ios/export.log
