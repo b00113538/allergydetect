@@ -31,8 +31,17 @@ struct SkinLogDetailView: View {
             Section("Exposed to") {
                 if log.exposures.isEmpty { Text("Nothing listed").foregroundStyle(Color.nouriTextSecondary) }
                 ForEach(log.exposures) { exposure in
-                    Label(exposure.name, systemImage: exposure.kind.symbol)
-                        .badge(exposure.kind.label)
+                    if let ingredients = exposure.ingredients, !ingredients.isEmpty {
+                        DisclosureGroup {
+                            Text(ingredients.joined(separator: ", "))
+                                .font(.footnote)
+                                .foregroundStyle(Color.nouriTextSecondary)
+                        } label: {
+                            ExposureLabel(exposure: exposure)
+                        }
+                    } else {
+                        ExposureLabel(exposure: exposure)
+                    }
                 }
             }
             if !log.notes.isEmpty {
@@ -89,5 +98,22 @@ struct SkinLogRow: View {
         }
         .padding(12)
         .background(Color.nouriSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+private struct ExposureLabel: View {
+    let exposure: SkinExposure
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(exposure.name, systemImage: exposure.kind.symbol)
+                .badge(exposure.kind.label)
+            let groups = ContactAllergenGroup.allCases.filter(exposure.contactGroups.contains)
+            if !groups.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(groups) { Tag(text: $0.label, color: .nouriWarning) }
+                }
+            }
+        }
     }
 }

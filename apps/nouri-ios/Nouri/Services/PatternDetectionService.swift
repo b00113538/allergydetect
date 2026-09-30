@@ -62,10 +62,12 @@ struct PatternDetectionService {
         let ingredients = byIngredient.values.map(score).sorted(by: Self.ranking)
         let groups = byGroup.values.map(score).sorted(by: Self.ranking)
         let skin = analyzeSkin(logs: skinLogs)
+        let skinGroups = analyzeSkinGroups(logs: skinLogs)
 
         var categories: [TriggerDomain] = []
         if ingredients.contains(where: { $0.status == .likely }) { categories.append(.food) }
-        for domain in [TriggerDomain.skin, .fabric] where skin.contains(where: { $0.domain == domain && $0.status == .likely }) {
+        for domain in [TriggerDomain.skin, .fabric]
+        where (skin + skinGroups).contains(where: { $0.domain == domain && $0.status == .likely }) {
             categories.append(domain)
         }
 
@@ -75,6 +77,7 @@ struct PatternDetectionService {
             triggerIngredients: ingredients,
             triggerGroups: groups,
             skinTriggers: skin,
+            skinGroupTriggers: skinGroups,
             triggerCategories: categories,
             mealsAnalyzed: totalMeals,
             symptomLogsAnalyzed: symptoms.count,
@@ -101,6 +104,28 @@ struct PatternDetectionService {
         return byExposure.values.map { entry in
             makeTrigger(name: entry.tally.displayName, domain: entry.kind.domain, tally: entry.tally,
                         baseline: baseline(for: entry.tally, totalEvents: logs.count, totalReactions: totalReactions))
+        }
+        .sorted(by: Self.ranking)
+    }
+
+    /// Rolls every log up to contact-allergen groups (from product/fabric names and scanned label
+    /// ingredients) and scores those. This is what catches "fragrance" when it's spread across a
+    /// moisturiser, a shampoo and a detergent that each look harmless on their own.
+    func analyzeSkinGroups(logs: [SkinLog]) -> [TriggerIngredient] {
+        let totalReactions = logs.filter(\.isReaction).count
+        var byGroup: [ContactAllergenGroup: Tally] = [:]
+        for log in logs {
+            let groups = log.exposures.reduce(into: Set<ContactAllergenGroup>()) { $0.formUnion($1.contactGroups) }
+            for group in groups {
+                byGroup[group, default: Tally(displayName: group.label)]
+                    .record(log.isReaction, severity: log.isReaction ? log.severity : 0)
+            }
+        }
+        return byGroup.map { group, tally in
+            var trigger = makeTrigger(name: tally.displayName, domain: group.domain, tally: tally,
+                                      baseline: baseline(for: tally, totalEvents: logs.count, totalReactions: totalReactions))
+            trigger.contactGroup = group
+            return trigger
         }
         .sorted(by: Self.ranking)
     }

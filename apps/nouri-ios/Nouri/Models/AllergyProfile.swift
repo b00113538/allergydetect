@@ -40,8 +40,10 @@ struct TriggerIngredient: Codable, Hashable, Identifiable {
     var averageSeverity: Double
     var status: TriggerStatus
     var allergenGroups: [AllergenGroup]
+    /// Set on skin rollups ("Fragrance", "Wool") — the contact-allergen group this row scores.
+    var contactGroup: ContactAllergenGroup? = nil
 
-    var id: String { "\(domain.rawValue):\(ingredient)" }
+    var id: String { "\(domain.rawValue):\(contactGroup.map { "group:\($0.rawValue)" } ?? ingredient)" }
     var reactionRate: Double { exposures == 0 ? 0 : Double(reactions) / Double(exposures) }
 }
 
@@ -54,16 +56,19 @@ struct AllergyProfile: Codable, Identifiable, Equatable {
     var triggerGroups: [TriggerIngredient]
     /// Products, fabrics and materials from skin logs (phase 6), scored with the same rules.
     var skinTriggers: [TriggerIngredient]
+    /// The same analysis rolled up to contact-allergen groups across products (fragrance, wool, …).
+    var skinGroupTriggers: [TriggerIngredient]
     var triggerCategories: [TriggerDomain]
     var mealsAnalyzed: Int
     var symptomLogsAnalyzed: Int
     var lastUpdated: Date
 
     static func empty(userId: String) -> AllergyProfile {
-        AllergyProfile(id: "current", userId: userId, triggerIngredients: [], triggerGroups: [], skinTriggers: [],
+        AllergyProfile(id: "current", userId: userId, triggerIngredients: [], triggerGroups: [], skinTriggers: [], skinGroupTriggers: [],
                        triggerCategories: [], mealsAnalyzed: 0, symptomLogsAnalyzed: 0, lastUpdated: .now)
     }
 
     var likelyTriggers: [TriggerIngredient] { triggerIngredients.filter { $0.status == .likely } }
     var likelySkinTriggers: [TriggerIngredient] { skinTriggers.filter { $0.status == .likely } }
+    var likelySkinGroups: [TriggerIngredient] { skinGroupTriggers.filter { $0.status == .likely } }
 }

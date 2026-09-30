@@ -74,13 +74,15 @@ enum SampleData {
         for dayOffset in stride(from: days, through: 1, by: -1) where rng.next() % 3 != 0 {
             guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: today),
                   let time = calendar.date(bySettingHour: 20, minute: Int(rng.next() % 50), second: 0, of: day) else { continue }
-            var exposures = [SkinExposure(name: "Moisturiser", kind: .product)]
+            var exposures = [SkinExposure(name: moisturiserLabel.productName, kind: .product,
+                                          ingredients: moisturiserLabel.ingredients)]
             exposures.append(rng.next() % 2 == 0
                              ? SkinExposure(name: "Wool jumper", kind: .fabric)
                              : SkinExposure(name: "Cotton t-shirt", kind: .fabric))
             if rng.next() % 3 == 0 { exposures.append(SkinExposure(name: "Sunscreen", kind: .product)) }
 
             let wool = exposures.contains { $0.name == "Wool jumper" }
+            if let i = exposures.firstIndex(where: { $0.name == "Wool jumper" }) { exposures[i].ingredients = ["Wool", "Polyamide"] }
             let roll = rng.next() % 100
             if (wool && roll < 80) || roll < 5 {
                 logs.append(SkinLog(userId: userId, timestamp: time, exposures: exposures, reactions: [.itching, .redness],
@@ -91,6 +93,16 @@ enum SampleData {
         }
         return logs
     }
+
+    /// A typical fragranced moisturiser label (also the demo-mode label-reader result).
+    static let moisturiserLabel = ProductLabel(
+        productName: "Daily Moisturising Lotion",
+        kind: .product,
+        ingredients: ["Aqua", "Glycerin", "Paraffinum Liquidum", "Cetearyl Alcohol", "Dimethicone", "Parfum",
+                      "Phenoxyethanol", "Methylparaben", "Linalool", "Limonene", "Hexyl Cinnamal", "Sodium Hydroxide"],
+        percentages: [:],
+        notes: "Demo mode — connect Firebase to read real labels."
+    )
 
     /// A plausible specific-IgE panel that agrees with the sample history (dairy, shellfish) and adds
     /// an inhalant (dust mite) the food logs can't see.

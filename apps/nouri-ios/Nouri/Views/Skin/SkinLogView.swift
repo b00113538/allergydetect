@@ -12,6 +12,7 @@ struct SkinLogView: View {
     @State private var exposures: [SkinExposure] = []
     @State private var kind: SkinExposureKind = .fabric
     @State private var newName = ""
+    @State private var showLabelScan = false
     @State private var reactions: Set<SkinReaction> = []
     @State private var bodyAreas: Set<BodyArea> = []
     @State private var severity = 2
@@ -45,6 +46,9 @@ struct SkinLogView: View {
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { photo = $0 }.ignoresSafeArea()
             }
+            .sheet(isPresented: $showLabelScan) {
+                LabelScanView(initialKind: kind == .fabric ? .fabric : .product) { add($0) }
+            }
             .onChange(of: libraryItem) { _, item in
                 guard let item else { return }
                 Task {
@@ -73,7 +77,17 @@ struct SkinLogView: View {
                         .accessibilityHint("Removes it")
                     }
                 }
+                let flagged = Set(exposures.flatMap(\.contactGroups))
+                if !flagged.isEmpty {
+                    Text("Contains: " + ContactAllergenGroup.allCases.filter(flagged.contains).map(\.label).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(Color.nouriTextSecondary)
+                }
             }
+            Button { showLabelScan = true } label: {
+                Label("Scan an ingredients or care label", systemImage: "text.viewfinder")
+            }
+            .buttonStyle(.nouriSecondary)
             Picker("Type", selection: $kind) {
                 ForEach(SkinExposureKind.allCases) { Label($0.label, systemImage: $0.symbol).tag($0) }
             }
@@ -89,9 +103,10 @@ struct SkinLogView: View {
             .padding(12)
             .background(Color.nouriSurfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             FlowLayout {
-                ForEach(suggestions, id: \.self) { name in
-                    Chip(title: name, systemImage: "plus", isSelected: false) {
-                        add(SkinExposure(name: name, kind: kind))
+                ForEach(suggestions) { suggestion in
+                    Chip(title: suggestion.name, systemImage: suggestion.ingredients == nil ? "plus" : "doc.text",
+                         isSelected: false) {
+                        add(suggestion)
                     }
                 }
             }
@@ -181,14 +196,13 @@ struct SkinLogView: View {
         }
     }
 
-    /// The user's own history for this type first, then generic quick picks.
-    private var suggestions: [String] {
+    /// The user's own history for this type first (with any scanned label), then generic quick picks.
+    private var suggestions: [SkinExposure] {
         let added = Set(exposures.map(\.id))
-        let history = app.recentSkinExposures().filter { $0.kind == kind }.map(\.name)
+        let history = app.recentSkinExposures().filter { $0.kind == kind }
         var seen = Set<String>()
-        return (history + kind.suggestions).filter { name in
-            let id = SkinExposure(name: name, kind: kind).id
-            return !added.contains(id) && seen.insert(id).inserted
+        return (history + kind.suggestions.map { SkinExposure(name: $0, kind: kind) }).filter { exposure in
+            !added.contains(exposure.id) && seen.insert(exposure.id).inserted
         }
         .prefix(10)
         .map { $0 }
@@ -201,9 +215,13 @@ struct SkinLogView: View {
         newName = ""
     }
 
+    /// Adds an exposure, or updates it when the same item comes back with a freshly scanned label.
     private func add(_ exposure: SkinExposure) {
-        guard !exposures.contains(where: { $0.id == exposure.id }) else { return }
-        exposures.append(exposure)
+        if let index = exposures.firstIndex(where: { $0.id == exposure.id }) {
+            if exposure.ingredients != nil { exposures[index] = exposure }
+        } else {
+            exposures.append(exposure)
+        }
     }
 
     /// "No reaction" is mutually exclusive with actual reactions.
