@@ -11,6 +11,7 @@ import FirebaseStorage
 ///   users/{uid}/symptoms/{logId}      – SymptomLog
 ///   users/{uid}/skinLogs/{logId}      – SkinLog
 ///   users/{uid}/bloodwork/{recordId}  – BloodworkRecord
+///   users/{uid}/devices/{fcmToken}    – push registration + reminder preferences
 ///   users/{uid}/profile/current       – AllergyProfile
 ///   users/{uid}/dineCodes/{id}        – DineCode (private bookkeeping)
 ///   dineCodes/{token}                 – DineCodeSnapshot (public, get-only)
@@ -155,6 +156,16 @@ final class FirebaseService {
             data["needsSync"] = false
             return try? Firestore.Decoder().decode(T.self, from: data)
         }
+    }
+
+    // MARK: Push devices
+
+    func saveDevice(uid: String, token: String, fields: [String: Any]) async throws {
+        try await userDoc(uid).collection("devices").document(token).setData(fields, merge: true)
+    }
+
+    func deleteDevice(uid: String, token: String) async {
+        try? await userDoc(uid).collection("devices").document(token).delete()
     }
 
     // MARK: Storage

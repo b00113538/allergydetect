@@ -27,23 +27,42 @@ struct RootView: View {
 }
 
 struct MainTabView: View {
+    enum Tab: Hashable { case today, insights, dineCode }
+
+    @State private var tab: Tab = .today
     @State private var symptomSheetMealId: SheetMealID?
+    @State private var showMealLog = false
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             NavigationStack { HomeView() }
                 .tabItem { Label("Today", systemImage: "house") }
+                .tag(Tab.today)
             NavigationStack { ProfileView() }
                 .tabItem { Label("Insights", systemImage: "chart.bar.xaxis") }
+                .tag(Tab.insights)
             NavigationStack { DineCodeView() }
                 .tabItem { Label("Dine Code", systemImage: "qrcode") }
+                .tag(Tab.dineCode)
         }
         .onReceive(NotificationCenter.default.publisher(for: .nouriOpenSymptomLog)) { note in
             symptomSheetMealId = SheetMealID(mealId: note.object as? String)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .nouriOpenRoute)) { note in
+            switch note.object as? NotificationRoute {
+            case .logMeal:
+                tab = .today
+                showMealLog = true
+            case .insights:
+                tab = .insights
+            case nil:
+                break
+            }
+        }
         .sheet(item: $symptomSheetMealId) { item in
             SymptomLogView(preselectedMealId: item.mealId)
         }
+        .sheet(isPresented: $showMealLog) { MealLogFlowView() }
     }
 
     struct SheetMealID: Identifiable {

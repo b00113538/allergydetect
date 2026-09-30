@@ -61,9 +61,15 @@ way to put it on a phone for a pitch.
    cp .firebaserc.example .firebaserc          # set your project id
    (cd functions && npm install)
    firebase functions:secrets:set ANTHROPIC_API_KEY
+   # Push: upload an APNs auth key (.p8) in Firebase console → Project settings → Cloud Messaging.
    firebase deploy --only firestore,storage,functions,hosting
    ```
 4. Set `NouriDineCodeBaseURL` in `project.yml` to `https://<project-id>.web.app/d/` and regenerate.
+5. Push notifications need a paid Apple Developer account:
+   - Set `DEVELOPMENT_TEAM` in `project.yml`. The `aps-environment` entitlement is already declared; switch it to `production` for TestFlight.
+   - Create an APNs auth key and upload it to Firebase (step 3).
+   - Test on a real device.
+   - Post-meal check-ins work without any of this.
 
 ## How the pieces work
 
@@ -120,8 +126,21 @@ compares the latest result per allergen with the food patterns and shows one of 
 
 Food results of class 2 or higher are added to the Dine Code as "Positive blood test".
 
-**Reminders.** Logging a meal schedules a local notification three hours later asking how the user feels.
-Tapping it opens the symptom log linked to that meal. No server is needed, so remote APNs/FCM can wait until after the MVP.
+**Reminders and push.** There are two kinds of notification.
+- **Post-meal check-ins are local.** Logging a meal schedules an on-device notification three hours later, asking
+  how the user feels. It fires even when the app is closed or the phone is offline. Tapping it opens the symptom log
+  linked to that meal.
+- **Server pushes use FCM (APNs underneath).**
+  - After sign-in, the app registers with APNs, hands the token to Firebase Messaging, and stores the FCM token at
+    `users/{uid}/devices/{token}`. That document holds the user's preferences, time zone and UTC offset, and is
+    refreshed on every launch so DST and travel are picked up.
+  - The `sendScheduledPushes` function runs every hour. It finds the devices whose reminder hour is now (a
+    collection-group query on `reminderUtcHour`), then:
+    - **Sunday:** sends a weekly summary of meals, reactions and the top likely trigger. Tapping it opens Insights.
+    - **Other days:** sends an evening reminder only if nothing at all was logged since local midnight. Tapping it
+      opens meal logging.
+  - Dead tokens are deleted when FCM rejects them. Sign-out deletes the device document and the FCM token.
+  - Users control all of this in Profile → Notifications (on/off toggles and a reminder time).
 
 ## Tests
 
@@ -136,10 +155,9 @@ Tapping it opens the symptom log linked to that meal. No server is needed, so re
 xcodebuild test -project Nouri.xcodeproj -scheme Nouri -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-The function: `cd firebase/functions && npm run typecheck`.
+Functions: `cd firebase/functions && npm run typecheck && npm test`. The tests cover the push scheduling helpers.
 
 ## Next
 
 - Read ingredient labels on skin products (a photo of the back of the bottle through the same Claude pipeline).
   That would let fragrance, lanolin or preservatives be tracked across different products.
-- Remote push notifications (APNs/FCM) for check-ins when the app hasn't been opened.
