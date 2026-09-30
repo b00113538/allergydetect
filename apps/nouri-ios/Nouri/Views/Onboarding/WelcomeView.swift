@@ -83,7 +83,7 @@ struct WelcomeView: View {
 
     private var demoCard: some View {
         NouriCard {
-            Label("Demo mode", systemImage: "sparkles").font(NouriFont.label).foregroundStyle(Color.nouriAccent)
+            Label("Demo mode", systemImage: "sparkles").font(NouriFont.label).foregroundStyle(Color.nouriAccentText)
             Text("Firebase isn't configured in this build, so your data stays on this device and meal photos return a sample analysis.")
                 .font(.footnote)
                 .foregroundStyle(Color.nouriTextSecondary)

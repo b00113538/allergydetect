@@ -21,7 +21,7 @@ struct SymptomLogView: View {
                         FlowLayout {
                             ForEach(SymptomType.allCases) { symptom in
                                 Chip(title: symptom.label, systemImage: symptom.symbol, isSelected: selected.contains(symptom),
-                                     tint: symptom == .none ? .nouriSuccess : .nouriPrimary) {
+                                     tint: symptom == .none ? .nouriSuccess : .nouriPrimaryText) {
                                     toggle(symptom)
                                 }
                             }

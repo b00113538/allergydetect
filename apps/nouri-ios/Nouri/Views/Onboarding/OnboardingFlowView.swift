@@ -20,7 +20,7 @@ struct OnboardingFlowView: View {
     var body: some View {
         VStack(spacing: 0) {
             ProgressView(value: Double(step + 1), total: Double(stepCount))
-                .tint(Color.nouriPrimary)
+                .tint(Color.nouriPrimaryText)
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
 

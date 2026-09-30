@@ -155,6 +155,13 @@ compares the latest result per allergen with the food patterns and shows one of 
 
 Food results of class 2 or higher are added to the Dine Code as "Positive blood test".
 
+**Colours.** Colours are defined as asset-catalog colour sets, each with a light and a dark variant. Dark mode uses the
+brand spec (#10231E, #3E9B82, #CDAD5E, #E8EFE8). Light mode is cream, sage and gold. Each brand colour comes as a
+*fill*, used for buttons, bars and icons, and a readable *text* version (`nouriPrimaryText`, `nouriAccentText`) for
+links, captions, tags and selected chips. Status colours double as text. `ColorContrastTests` checks that every text
+colour reaches WCAG AA (4.5:1) on the background, on cards and on its own tag tint, in both modes. The Dine Code
+scan page and the legal pages use the same text tones.
+
 **Reminders and push.** There are two kinds of notification.
 - **Post-meal check-ins are local.** Logging a meal schedules an on-device notification three hours later, asking
   how the user feels. It fires even when the app is closed or the phone is offline. Tapping it opens the symptom log
