@@ -34,8 +34,8 @@ struct NouriSecondaryButtonStyle: ButtonStyle {
             .font(.headline)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .foregroundStyle(Color.nouriPrimary)
-            .background(Capsule().stroke(Color.nouriPrimary, lineWidth: 1.5))
+            .foregroundStyle(Color.nouriPrimaryText)
+            .background(Capsule().stroke(Color.nouriPrimaryText, lineWidth: 1.5))
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
@@ -53,7 +53,8 @@ struct Chip: View {
     let title: String
     var systemImage: String? = nil
     var isSelected: Bool
-    var tint: Color = .nouriPrimary
+    /// Fill when selected (with `nouriOnPrimary` text), so it uses the readable tone.
+    var tint: Color = .nouriPrimaryText
     var action: () -> Void
 
     var body: some View {
@@ -77,7 +78,7 @@ struct Chip: View {
 /// Small coloured tag, e.g. allergen flags.
 struct Tag: View {
     let text: String
-    var color: Color = .nouriAccent
+    var color: Color = .nouriAccentText
 
     var body: some View {
         Text(text)

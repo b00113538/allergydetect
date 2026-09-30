@@ -30,7 +30,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.nouriAccent)
+                .foregroundStyle(Color.nouriAccentText)
             Text("\(greeting), \(app.user?.firstName ?? "there")").nouriHeading(.largeTitle)
         }
     }

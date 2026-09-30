@@ -117,7 +117,7 @@ struct DineCodeView: View {
         switch level {
         case "Confirmed allergy": .nouriDanger
         case "Likely trigger": .nouriWarning
-        default: .nouriAccent
+        default: .nouriAccentText
         }
     }
 

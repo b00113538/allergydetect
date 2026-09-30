@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Serif headings (matching the pitch-deck branding), clean sans body text.
 /// Headings use the system serif (New York) so they scale with Dynamic Type. To use the exact
-/// mockup typeface instead, add the font file to the target and set `headingFontName`.
+/// brand typeface instead, add the font file to the target and set `headingFontName`.
 enum NouriFont {
     static var headingFontName: String? = nil
 

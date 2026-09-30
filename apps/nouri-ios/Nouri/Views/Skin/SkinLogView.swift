@@ -119,7 +119,7 @@ struct SkinLogView: View {
             FlowLayout {
                 ForEach(SkinReaction.allCases) { reaction in
                     Chip(title: reaction.label, systemImage: reaction.symbol, isSelected: reactions.contains(reaction),
-                         tint: reaction == .none ? .nouriSuccess : .nouriPrimary) {
+                         tint: reaction == .none ? .nouriSuccess : .nouriPrimaryText) {
                         toggle(reaction)
                     }
                 }

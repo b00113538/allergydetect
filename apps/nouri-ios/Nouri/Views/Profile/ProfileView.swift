@@ -115,8 +115,8 @@ struct ProfileView: View {
                 .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { _ in AxisValueLabel(format: .dateTime.day().month(.abbreviated)) } }
                 .frame(height: 180)
                 HStack(spacing: 14) {
-                    Label("Reactions", systemImage: "square.fill").foregroundStyle(Color.nouriPrimary)
-                    Label("Avg severity", systemImage: "circle.fill").foregroundStyle(Color.nouriAccent)
+                    Label("Reactions", systemImage: "square.fill").foregroundStyle(Color.nouriPrimaryText)
+                    Label("Avg severity", systemImage: "circle.fill").foregroundStyle(Color.nouriAccentText)
                 }
                 .font(.caption)
             }

@@ -83,7 +83,7 @@ private struct FindingRow: View {
         switch finding.kind {
         case .agrees: .nouriDanger
         case .sensitisedOnly: .nouriWarning
-        case .patternOnly: .nouriAccent
+        case .patternOnly: .nouriAccentText
         }
     }
 

@@ -20,7 +20,7 @@ struct NouriApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
-                .tint(Color.nouriPrimary)
+                .tint(Color.nouriPrimaryText)
         }
     }
 }
