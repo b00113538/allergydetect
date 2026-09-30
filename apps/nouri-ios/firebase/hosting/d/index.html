@@ -99,7 +99,7 @@
   }
 
   function levelClass(level) {
-    if (level === "Confirmed allergy") return "confirmed";
+    if (level === "Confirmed allergy" || level === "Positive blood test") return "confirmed";
     if (level === "Likely trigger") return "likely";
     return "watching";
   }

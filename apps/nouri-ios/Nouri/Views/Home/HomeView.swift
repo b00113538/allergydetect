@@ -4,6 +4,7 @@ struct HomeView: View {
     @EnvironmentObject private var app: AppState
     @State private var showMealLog = false
     @State private var showSymptomLog = false
+    @State private var showSkinLog = false
     @State private var symptomMealId: String?
 
     var body: some View {
@@ -22,6 +23,7 @@ struct HomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showMealLog) { MealLogFlowView() }
         .sheet(isPresented: $showSymptomLog) { SymptomLogView(preselectedMealId: symptomMealId) }
+        .sheet(isPresented: $showSkinLog) { SkinLogView() }
     }
 
     private var header: some View {
@@ -34,13 +36,16 @@ struct HomeView: View {
     }
 
     private var quickLog: some View {
-        HStack(spacing: 14) {
-            QuickLogButton(title: "Log meal", subtitle: "Snap a photo", systemImage: "camera.fill", tint: .nouriPrimary) {
+        HStack(spacing: 10) {
+            QuickLogButton(title: "Meal", subtitle: "Snap a photo", systemImage: "camera.fill", tint: .nouriPrimary) {
                 showMealLog = true
             }
-            QuickLogButton(title: "Log symptom", subtitle: "How do you feel?", systemImage: "waveform.path.ecg", tint: .nouriAccent) {
+            QuickLogButton(title: "Symptom", subtitle: "How you feel", systemImage: "waveform.path.ecg", tint: .nouriAccent) {
                 symptomMealId = nil
                 showSymptomLog = true
+            }
+            QuickLogButton(title: "Skin", subtitle: "Clothes & products", systemImage: "hand.raised.fill", tint: .nouriPrimary) {
+                showSkinLog = true
             }
         }
     }
@@ -125,6 +130,9 @@ struct HomeView: View {
                         .contextMenu {
                             Button("Delete", role: .destructive) { app.deleteSymptom(log) }
                         }
+                case .skin(let log):
+                    NavigationLink { SkinLogDetailView(log: log) } label: { SkinLogRow(log: log) }
+                        .buttonStyle(.plain)
                 }
             }
         }
@@ -132,6 +140,7 @@ struct HomeView: View {
 
     private var timelineItems: [TimelineItem] {
         let items = app.meals.prefix(15).map(TimelineItem.meal) + app.symptoms.prefix(15).map(TimelineItem.symptom)
+            + app.skinLogs.prefix(10).map(TimelineItem.skin)
         return Array(items.sorted { $0.date > $1.date }.prefix(20))
     }
 
@@ -147,11 +156,13 @@ struct HomeView: View {
 enum TimelineItem: Identifiable {
     case meal(MealEntry)
     case symptom(SymptomLog)
+    case skin(SkinLog)
 
     var id: String {
         switch self {
         case .meal(let m): "m-\(m.id)"
         case .symptom(let s): "s-\(s.id)"
+        case .skin(let k): "k-\(k.id)"
         }
     }
 
@@ -159,6 +170,7 @@ enum TimelineItem: Identifiable {
         switch self {
         case .meal(let m): m.timestamp
         case .symptom(let s): s.timestamp
+        case .skin(let k): k.timestamp
         }
     }
 }
@@ -179,9 +191,9 @@ struct QuickLogButton: View {
                     .frame(width: 44, height: 44)
                     .background(tint.opacity(0.14), in: Circle())
                 Text(title).font(.headline).foregroundStyle(Color.nouriTextPrimary)
-                Text(subtitle).font(.caption).foregroundStyle(Color.nouriTextSecondary)
+                Text(subtitle).font(.caption).foregroundStyle(Color.nouriTextSecondary).lineLimit(2, reservesSpace: true)
             }
-            .padding(16)
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.nouriSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.nouriBorder))

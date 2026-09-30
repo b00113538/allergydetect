@@ -25,7 +25,8 @@ enum DineCodeService {
         return token
     }
 
-    static func snapshot(user: User, profile: AllergyProfile?, isActive: Bool = true, now: Date = .now) -> DineCodeSnapshot {
+    static func snapshot(user: User, profile: AllergyProfile?, bloodwork: [BloodworkRecord] = [],
+                         isActive: Bool = true, now: Date = .now) -> DineCodeSnapshot {
         var items: [DineCodeSnapshot.Item] = []
         var seen = Set<String>()
         func add(_ name: String, _ level: String) {
@@ -35,6 +36,11 @@ enum DineCodeService {
         }
         for condition in user.knownConditions {
             add(AllergenGroup(rawValue: condition)?.label ?? condition.capitalizedFirst, "Confirmed allergy")
+        }
+        // Food allergens with a moderate-or-higher IgE result (class 2+). Pollen, dust mite etc. are left off.
+        for dated in BloodworkInsights.latestResults(bloodwork)
+        where dated.result.effectiveClass >= 2 && !dated.result.allergenGroups.isEmpty {
+            add(dated.result.allergen.capitalizedFirst, "Positive blood test")
         }
         if let profile {
             for group in profile.triggerGroups where group.status == .likely { add(group.ingredient, "Likely trigger") }

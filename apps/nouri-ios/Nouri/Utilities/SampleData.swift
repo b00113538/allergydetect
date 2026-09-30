@@ -65,6 +65,50 @@ enum SampleData {
         return (meals, logs)
     }
 
+    /// Skin diary for the same period: wool reliably causes itching; everything else is noise.
+    static func skinHistory(userId: String, days: Int = 21, now: Date = .now) -> [SkinLog] {
+        var rng = SeededGenerator(seed: 7)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        var logs: [SkinLog] = []
+        for dayOffset in stride(from: days, through: 1, by: -1) where rng.next() % 3 != 0 {
+            guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: today),
+                  let time = calendar.date(bySettingHour: 20, minute: Int(rng.next() % 50), second: 0, of: day) else { continue }
+            var exposures = [SkinExposure(name: "Moisturiser", kind: .product)]
+            exposures.append(rng.next() % 2 == 0
+                             ? SkinExposure(name: "Wool jumper", kind: .fabric)
+                             : SkinExposure(name: "Cotton t-shirt", kind: .fabric))
+            if rng.next() % 3 == 0 { exposures.append(SkinExposure(name: "Sunscreen", kind: .product)) }
+
+            let wool = exposures.contains { $0.name == "Wool jumper" }
+            let roll = rng.next() % 100
+            if (wool && roll < 80) || roll < 5 {
+                logs.append(SkinLog(userId: userId, timestamp: time, exposures: exposures, reactions: [.itching, .redness],
+                                    bodyAreas: [.arms, .torso], severity: 2 + Int(rng.next() % 2)))
+            } else {
+                logs.append(SkinLog(userId: userId, timestamp: time, exposures: exposures, reactions: [.none], severity: 1))
+            }
+        }
+        return logs
+    }
+
+    /// A plausible specific-IgE panel that agrees with the sample history (dairy, shellfish) and adds
+    /// an inhalant (dust mite) the food logs can't see.
+    static let bloodworkPanel: [BloodworkRecord.PanelResult] = [
+        .init(allergen: "Cow's milk", igeLevel: 8.2, igeClass: 3),
+        .init(allergen: "Shrimp", igeLevel: 1.4, igeClass: 2),
+        .init(allergen: "Dermatophagoides pteronyssinus (dust mite)", igeLevel: 2.1, igeClass: 2),
+        .init(allergen: "Egg white", igeLevel: 0.12, igeClass: 0),
+        .init(allergen: "Wheat", igeLevel: 0.21, igeClass: 0),
+        .init(allergen: "Peanut", igeLevel: 0.1, igeClass: 0, comparator: .lessThan),
+        .init(allergen: "Sesame", igeLevel: 0.1, igeClass: 0, comparator: .lessThan),
+    ]
+
+    static func bloodworkRecord(userId: String, now: Date = .now) -> BloodworkRecord {
+        BloodworkRecord(userId: userId, testDate: Calendar.current.date(byAdding: .day, value: -10, to: now) ?? now,
+                        labName: "Demo Diagnostics", panelResults: bloodworkPanel)
+    }
+
     /// SplitMix64 — tiny, deterministic, good enough for demo data.
     struct SeededGenerator {
         private var state: UInt64

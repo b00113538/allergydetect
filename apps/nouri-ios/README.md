@@ -2,6 +2,7 @@
 
 SwiftUI app for food-trigger detection: photograph a meal → Claude identifies likely ingredients →
 log symptoms → a correlation engine surfaces likely triggers → share a **Dine Code** QR with restaurants.
+Phase 6 adds skin/fabric reaction tracking and allergy blood test upload (Claude reads the report).
 
 This lives alongside the existing Expo/FastAPI app in this monorepo; it is independent of it.
 
@@ -14,19 +15,21 @@ apps/nouri-ios/
     Persistence/              LocalDatabase — GRDB/SQLite, offline-first source of truth
     Services/
       ClaudeVisionService     meal photo → ingredient JSON (via Cloud Function) + DemoVisionService
+      BloodworkReaderService  lab report PDF/photo → IgE results (via Cloud Function) + DemoBloodworkService
+      BloodworkInsights       compares blood test results with the logged patterns
       AllergenDatabase        curated allergen lookup, flags high-risk ingredients offline
-      PatternDetectionService correlation engine + weekly trends
+      PatternDetectionService correlation engine (food + skin/fabric) + weekly trends
       FirebaseService         Auth, Firestore sync, Storage uploads, Dine Code publishing
       QRCodeService           CoreImage CIQRCodeGenerator
       DineCodeService         token generation + public snapshot
       NotificationService     post-meal check-in reminders
     DesignSystem/             Colors (asset-catalog backed), Typography (serif headings), Components
-    Views/                    Onboarding, Home, MealLog, SymptomLog, Profile, DineCode
+    Views/                    Onboarding, Home, MealLog, SymptomLog, Skin, Bloodwork, Profile, DineCode
     Resources/Assets.xcassets colour sets with light + dark variants
-  NouriTests/                 pattern detection + allergen DB unit tests
+  NouriTests/                 pattern detection (food + skin), allergen DB, blood work, SQLite round-trip tests
   firebase/
     firestore.rules, storage.rules, firebase.json
-    functions/                analyzeMealPhoto callable (TypeScript, Anthropic SDK)
+    functions/                analyzeMealPhoto + extractBloodworkPanel callables (TypeScript, Anthropic SDK)
     hosting/d/index.html      Dine Code scan page (no app install needed)
 ```
 
@@ -96,12 +99,38 @@ guessed or enumerated. When the profile changes, the snapshot is rewritten, so a
 API, follows the device's light/dark setting, and prints cleanly. In demo mode, the profile goes into the URL fragment
 instead, so the same page works with no backend.
 
+**Skin & fabric (phase 6).** A skin log lists what touched the skin that day — products (moisturiser,
+detergent), fabrics (wool, polyester) and materials (nickel, latex) — and how the skin reacted, including
+"no reaction". Each log is one exposure event, and `PatternDetectionService.analyzeSkin` scores every item with
+the same rules as foods (≥3 logs, ≥70% reaction rate, above the baseline of the user's other days). Products
+roll up to the `skin` domain, fabrics and materials to `fabric`. Skin triggers are kept separate from food
+triggers, so they never appear on the Dine Code. Logs can include a photo, body areas and severity.
+
+**Blood work (phase 6).** The user scans a paper report (VisionKit document camera, multi-page → PDF),
+uploads a PDF, or picks a photo. The app sends it to the `extractBloodworkPanel` callable, which passes it
+to Claude as a `document` (PDF) or `image` block with a JSON schema: `{ testDate, labName, results: [{ allergen,
+value, comparator, unit, reportedClass }], notes }`. The model transcribes values and bounds ("<0.10") exactly
+and never computes classes itself. Every row is then shown for the user to check and edit before saving. Classes
+the report doesn't state are derived on-device from the standard ImmunoCAP thresholds (`IgEScale`). The original
+file is kept on-device and uploaded to `users/{uid}/bloodwork/`. On Insights → Blood work, `BloodworkInsights`
+compares the latest result per allergen with the food patterns and shows one of three outcomes:
+- **Agrees**: sensitised, and the logs show the pattern.
+- **Sensitised only**: sensitised, but the logs don't show it.
+- **Pattern, but blood test negative**: often an intolerance, not an IgE allergy.
+
+Food results of class 2 or higher are added to the Dine Code as "Positive blood test".
+
 **Reminders.** Logging a meal schedules a local notification three hours later asking how the user feels.
 Tapping it opens the symptom log linked to that meal. No server is needed, so remote APNs/FCM can wait until after the MVP.
 
 ## Tests
 
-`NouriTests` covers the correlation engine and the allergen matcher. Run them with ⌘U in Xcode, or:
+`NouriTests` covers:
+- the correlation engine for food and skin
+- the allergen matcher
+- IgE class thresholds and parsing of the report reader's output
+- the blood-test-vs-logs comparison
+- a SQLite round trip of the phase 6 tables Run them with ⌘U in Xcode, or:
 
 ```bash
 xcodebuild test -project Nouri.xcodeproj -scheme Nouri -destination 'platform=iOS Simulator,name=iPhone 16'
@@ -109,11 +138,8 @@ xcodebuild test -project Nouri.xcodeproj -scheme Nouri -destination 'platform=iO
 
 The function: `cd firebase/functions && npm run typecheck`.
 
-## Next (Phase 6)
+## Next
 
-`SkinLog` and `BloodworkRecord` models and tables are already in place.
-- Skin/fabric: reuse `MealLogFlowView`'s capture flow and run `PatternDetectionService` over skin logs with
-  `domain: .skin/.fabric`.
-- Bloodwork: upload the PDF/photo to Storage, then add an `extractBloodwork` callable that sends it to Claude as
-  a `document`/`image` block with a `{ testDate, panelResults: [{ allergen, igeLevel, igeClass }] }` schema.
-  Then compare the results with the detected triggers on the Insights screen.
+- Read ingredient labels on skin products (a photo of the back of the bottle through the same Claude pipeline).
+  That would let fragrance, lanolin or preservatives be tracked across different products.
+- Remote push notifications (APNs/FCM) for check-ins when the app hasn't been opened.

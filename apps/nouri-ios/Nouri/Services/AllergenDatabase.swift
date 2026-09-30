@@ -74,7 +74,7 @@ enum AllergenDatabase {
               keywords: ["soy", "soya", "soybean", "tofu", "edamame", "miso", "tempeh", "tamari", "natto"],
               exclusions: []),
         Entry(group: .fish,
-              keywords: ["fish", "salmon", "tuna", "cod", "haddock", "anchovy", "sardine", "mackerel",
+              keywords: ["fish", "codfish", "salmon", "tuna", "cod", "haddock", "anchovy", "sardine", "mackerel",
                          "trout", "tilapia", "halibut", "sea bass", "hammour", "snapper", "worcestershire",
                          "caesar dressing", "fish sauce", "bonito"],
               exclusions: ["shellfish"]),

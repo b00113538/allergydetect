@@ -9,6 +9,9 @@ import Foundation
 /// than the user's baseline (meals *without* it) — the baseline check keeps ubiquitous items like
 /// salt or olive oil from being blamed for everything.
 ///
+/// Skin logs (phase 6) are scored the same way: each log is one exposure event, and the products,
+/// fabrics and materials in it play the part of ingredients.
+///
 /// Deliberately explainable: every number shown in the UI comes straight from these counts. It can be
 /// swapped for a learned model later behind the same `analyze` signature.
 struct PatternDetectionService {
@@ -26,7 +29,7 @@ struct PatternDetectionService {
 
     var configuration = Configuration()
 
-    func analyze(meals: [MealEntry], symptoms: [SymptomLog], userId: String, now: Date = .now) -> AllergyProfile {
+    func analyze(meals: [MealEntry], symptoms: [SymptomLog], skinLogs: [SkinLog] = [], userId: String, now: Date = .now) -> AllergyProfile {
         let outcomes = mealOutcomes(meals: meals, symptoms: symptoms)
         let totalMeals = outcomes.count
         let totalReactions = outcomes.filter(\.reacted).count
@@ -40,39 +43,74 @@ struct PatternDetectionService {
             for ingredient in outcome.meal.ingredients {
                 let key = IngredientNormalizer.canonicalKey(ingredient.name)
                 guard !key.isEmpty, seenKeys.insert(key).inserted else { continue }
-                byIngredient[key, default: Tally(displayName: ingredient.name)].record(outcome)
+                byIngredient[key, default: Tally(displayName: ingredient.name)].record(outcome.reacted, severity: outcome.severity)
                 let groups = ingredient.allergenGroups.isEmpty ? AllergenDatabase.groups(for: ingredient.name) : ingredient.allergenGroups
                 byIngredient[key]?.groups.formUnion(groups)
                 seenGroups.formUnion(groups)
             }
             for group in seenGroups {
-                byGroup[group, default: Tally(displayName: group.label)].record(outcome)
+                byGroup[group, default: Tally(displayName: group.label)].record(outcome.reacted, severity: outcome.severity)
                 byGroup[group]?.groups.insert(group)
             }
         }
 
         func score(_ tally: Tally) -> TriggerIngredient {
-            let withoutMeals = totalMeals - tally.exposures
-            let withoutReactions = totalReactions - tally.reactions
-            // Too few meals without the ingredient → no meaningful comparison (e.g. it's in everything).
-            let baseline = withoutMeals >= configuration.minBaselineMeals
-                ? Double(withoutReactions) / Double(withoutMeals) : nil
-            return makeTrigger(name: tally.displayName, tally: tally, baseline: baseline)
+            makeTrigger(name: tally.displayName, domain: .food, tally: tally,
+                        baseline: baseline(for: tally, totalEvents: totalMeals, totalReactions: totalReactions))
         }
 
         let ingredients = byIngredient.values.map(score).sorted(by: Self.ranking)
         let groups = byGroup.values.map(score).sorted(by: Self.ranking)
+        let skin = analyzeSkin(logs: skinLogs)
+
+        var categories: [TriggerDomain] = []
+        if ingredients.contains(where: { $0.status == .likely }) { categories.append(.food) }
+        for domain in [TriggerDomain.skin, .fabric] where skin.contains(where: { $0.domain == domain && $0.status == .likely }) {
+            categories.append(domain)
+        }
 
         return AllergyProfile(
             id: "current",
             userId: userId,
             triggerIngredients: ingredients,
             triggerGroups: groups,
-            triggerCategories: ingredients.contains { $0.status == .likely } ? [.food] : [],
+            skinTriggers: skin,
+            triggerCategories: categories,
             mealsAnalyzed: totalMeals,
             symptomLogsAnalyzed: symptoms.count,
             lastUpdated: now
         )
+    }
+
+    // MARK: - Skin
+
+    /// Scores every product / fabric / material across skin logs. A log with an actual reaction
+    /// counts as a reaction for everything in it; a "no reaction" log is a clean exposure.
+    func analyzeSkin(logs: [SkinLog]) -> [TriggerIngredient] {
+        let totalReactions = logs.filter(\.isReaction).count
+        var byExposure: [String: (kind: SkinExposureKind, tally: Tally)] = [:]
+        for log in logs {
+            var seen = Set<String>()
+            for exposure in log.exposures {
+                guard !IngredientNormalizer.canonicalKey(exposure.name).isEmpty, seen.insert(exposure.id).inserted else { continue }
+                var entry = byExposure[exposure.id] ?? (kind: exposure.kind, tally: Tally(displayName: exposure.name))
+                entry.tally.record(log.isReaction, severity: log.isReaction ? log.severity : 0)
+                byExposure[exposure.id] = entry
+            }
+        }
+        return byExposure.values.map { entry in
+            makeTrigger(name: entry.tally.displayName, domain: entry.kind.domain, tally: entry.tally,
+                        baseline: baseline(for: entry.tally, totalEvents: logs.count, totalReactions: totalReactions))
+        }
+        .sorted(by: Self.ranking)
+    }
+
+    /// Reaction rate of the events *without* this item; `nil` when too few exist to compare
+    /// (e.g. an ingredient that's in everything).
+    private func baseline(for tally: Tally, totalEvents: Int, totalReactions: Int) -> Double? {
+        let without = totalEvents - tally.exposures
+        guard without >= configuration.minBaselineMeals else { return nil }
+        return Double(totalReactions - tally.reactions) / Double(without)
     }
 
     // MARK: - Meal outcomes
@@ -106,7 +144,7 @@ struct PatternDetectionService {
 
     // MARK: - Scoring
 
-    private func makeTrigger(name: String, tally: Tally, baseline: Double?) -> TriggerIngredient {
+    private func makeTrigger(name: String, domain: TriggerDomain, tally: Tally, baseline: Double?) -> TriggerIngredient {
         let rate = tally.exposures == 0 ? 0 : Double(tally.reactions) / Double(tally.exposures)
         let avgSeverity = tally.reactions == 0 ? 0 : Double(tally.severitySum) / Double(tally.reactions)
         // Without a baseline we can't tell it apart from the rest of the diet: allow it on rate alone,
@@ -131,7 +169,7 @@ struct PatternDetectionService {
 
         return TriggerIngredient(
             ingredient: name,
-            domain: .food,
+            domain: domain,
             confidence: confidence,
             exposures: tally.exposures,
             reactions: tally.reactions,
@@ -155,11 +193,11 @@ struct PatternDetectionService {
         var severitySum = 0
         var groups = Set<AllergenGroup>()
 
-        mutating func record(_ outcome: MealOutcome) {
+        mutating func record(_ reacted: Bool, severity: Int) {
             exposures += 1
-            if outcome.reacted {
+            if reacted {
                 reactions += 1
-                severitySum += outcome.severity
+                severitySum += severity
             }
         }
     }

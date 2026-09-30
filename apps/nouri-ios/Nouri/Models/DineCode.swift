@@ -17,7 +17,7 @@ struct DineCode: Codable, Identifiable, Equatable {
 struct DineCodeSnapshot: Codable, Equatable {
     struct Item: Codable, Equatable {
         var name: String
-        /// "Confirmed allergy" | "Likely trigger" | "Watching"
+        /// "Confirmed allergy" | "Positive blood test" | "Likely trigger" | "Watching"
         var level: String
     }
 
