@@ -87,3 +87,4 @@ jobs:
           cache-dependency-path: apps/nouri-ios/firebase/functions/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test

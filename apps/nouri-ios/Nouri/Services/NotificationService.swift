@@ -1,7 +1,8 @@
 import UserNotifications
 
-/// Symptom-log reminders. MVP uses local notifications scheduled on-device after each meal —
-/// no server needed. Remote APNs (via FCM) can be added later for re-engagement campaigns.
+/// Post-meal check-ins: local notifications scheduled on-device after each meal. They fire even
+/// when the app isn't running and need no network. Server-sent pushes (evening reminder, weekly
+/// summary) live in `PushService` / `sendScheduledPushes`.
 enum NotificationService {
     static func requestAuthorization() async -> Bool {
         (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false

@@ -6,6 +6,9 @@ import * as logger from "firebase-functions/logger";
 // Set with: firebase functions:secrets:set ANTHROPIC_API_KEY
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 
+// Push notifications: evening reminder + weekly summary (see push.ts).
+export { sendScheduledPushes } from "./push";
+
 const MODEL = "claude-opus-5-5";
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 type MediaType = (typeof ALLOWED_MEDIA_TYPES)[number];

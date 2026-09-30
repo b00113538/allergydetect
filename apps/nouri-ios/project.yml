@@ -54,8 +54,15 @@ targets:
         product: FirebaseStorage
       - package: Firebase
         product: FirebaseFunctions
+      - package: Firebase
+        product: FirebaseMessaging
       - package: GRDB
         product: GRDB
+    entitlements:
+      path: Nouri/Resources/Nouri.entitlements
+      properties:
+        # Switch to "production" for TestFlight / App Store builds.
+        aps-environment: development
     info:
       path: Nouri/Resources/Info.plist
       properties:
@@ -67,6 +74,8 @@ targets:
         NSPhotoLibraryUsageDescription: Choose a photo of a meal, a skin reaction or a test report to log it.
         # Base URL of the Dine Code scan page (Firebase Hosting). Override per build config if needed.
         NouriDineCodeBaseURL: https://nouri-app.web.app/d/
+        # The APNs token is handed to FCM explicitly in AppDelegate (see PushService).
+        FirebaseAppDelegateProxyEnabled: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nouri.app

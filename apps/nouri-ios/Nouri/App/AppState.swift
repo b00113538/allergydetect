@@ -16,6 +16,7 @@ final class AppState: ObservableObject {
     @Published private(set) var profile: AllergyProfile?
     @Published private(set) var dineCode: DineCode?
     @Published var lastError: String?
+    @Published private(set) var pushPreferences = PushPreferences.load()
 
     /// Uid + email captured at sign-up, before onboarding creates the `User` record.
     private(set) var pendingAccount: (uid: String, email: String, name: String)?
@@ -36,6 +37,11 @@ final class AppState: ObservableObject {
         self.firebase = firebase
         self.vision = vision
         self.bloodworkReader = bloodworkReader
+        if firebase != nil {
+            PushService.shared.onTokenChange = { [weak self] _ in
+                Task { await self?.uploadPushRegistration() }
+            }
+        }
     }
 
     static func live() -> AppState {
@@ -70,6 +76,7 @@ final class AppState: ObservableObject {
             reload()
             phase = .ready
             syncInBackground()
+            Task { await refreshPushRegistration() }
         } else {
             pendingAccount = (uid, email, name)
             phase = .onboarding
@@ -121,6 +128,7 @@ final class AppState: ObservableObject {
         phase = .ready
         if let firebase { Task { try? await firebase.saveUser(user) } }
         _ = await NotificationService.requestAuthorization()
+        await refreshPushRegistration()
     }
 
     func updateKnownConditions(_ conditions: [String]) {
@@ -132,7 +140,12 @@ final class AppState: ObservableObject {
         Task { await refreshPublishedDineCode() }
     }
 
-    func signOut() {
+    func signOut() async {
+        // Unregister first: deleting the device document needs the still-signed-in user.
+        if let firebase, let uid = user?.id, let token = PushService.shared.token {
+            await firebase.deleteDevice(uid: uid, token: token)
+        }
+        if firebase != nil { await PushService.shared.reset() }
         try? firebase?.signOut()
         UserDefaults.standard.removeObject(forKey: Self.localUserKey)
         try? database.wipeAll()
@@ -144,6 +157,33 @@ final class AppState: ObservableObject {
         profile = nil
         dineCode = nil
         phase = .signedOut
+    }
+
+    // MARK: - Push notifications
+
+    var isPushAvailable: Bool { firebase != nil }
+
+    func updatePushPreferences(_ preferences: PushPreferences) {
+        pushPreferences = preferences
+        preferences.save()
+        Task { await uploadPushRegistration() }
+    }
+
+    /// Registers with APNs (if notifications are allowed) and refreshes this device's document, so a
+    /// time-zone or DST change moves the reminder hour with the user.
+    func refreshPushRegistration() async {
+        guard firebase != nil else { return }
+        await PushService.shared.registerIfAuthorized()
+        await uploadPushRegistration()
+    }
+
+    private func uploadPushRegistration() async {
+        guard let firebase, let uid = user?.id, let token = PushService.shared.token else { return }
+        do {
+            try await firebase.saveDevice(uid: uid, token: token, fields: pushPreferences.deviceFields())
+        } catch {
+            print("[Push] couldn't save device: \(error)")
+        }
     }
 
     // MARK: - Meals

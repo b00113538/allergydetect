@@ -2,12 +2,15 @@
   "name": "nouri-functions",
   "private": true,
   "main": "lib/index.js",
-  "engines": { "node": "22" },
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test": "tsc -p tsconfig.test.json && node --test build-test/test/*.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
