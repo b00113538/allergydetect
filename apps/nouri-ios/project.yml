@@ -63,8 +63,8 @@ targets:
         UILaunchScreen:
           UIColorName: NouriBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        NSCameraUsageDescription: Nouri uses the camera to photograph your meals so it can identify likely ingredients.
-        NSPhotoLibraryUsageDescription: Choose a meal photo from your library to log it.
+        NSCameraUsageDescription: Nouri uses the camera to photograph meals, skin reactions and allergy test reports.
+        NSPhotoLibraryUsageDescription: Choose a photo of a meal, a skin reaction or a test report to log it.
         # Base URL of the Dine Code scan page (Firebase Hosting). Override per build config if needed.
         NouriDineCodeBaseURL: https://nouri-app.web.app/d/
     settings:

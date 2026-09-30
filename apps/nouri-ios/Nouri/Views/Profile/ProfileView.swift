@@ -1,9 +1,16 @@
 import SwiftUI
 import Charts
 
-/// Trigger dashboard: detected patterns, confidence per ingredient, trend over time.
+/// Trigger dashboard: detected patterns, confidence per ingredient, trend over time — for food,
+/// and (phase 6) skin/fabric logs and uploaded blood work.
 struct ProfileView: View {
+    enum Tab: String, CaseIterable, Identifiable {
+        case food = "Food", skin = "Skin", bloodwork = "Blood work"
+        var id: String { rawValue }
+    }
+
     @EnvironmentObject private var app: AppState
+    @State private var tab: Tab = .food
     @State private var showAll = false
     @State private var selected: TriggerIngredient?
     @State private var showSettings = false
@@ -11,13 +18,24 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                summary
-                if let profile = app.profile {
-                    groupsSection(profile)
-                    triggersSection(profile)
-                    trendSection
+                Picker("Insights", selection: $tab) {
+                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
                 }
-                methodology
+                .pickerStyle(.segmented)
+                switch tab {
+                case .food:
+                    summary
+                    if let profile = app.profile {
+                        groupsSection(profile)
+                        triggersSection(profile)
+                        trendSection
+                    }
+                    methodology
+                case .skin:
+                    SkinInsightsView(selected: $selected)
+                case .bloodwork:
+                    BloodworkInsightsView()
+                }
             }
             .padding(20)
         }

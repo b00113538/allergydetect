@@ -52,15 +52,18 @@ struct AllergyProfile: Codable, Identifiable, Equatable {
     var triggerIngredients: [TriggerIngredient]
     /// The same analysis rolled up to allergen groups (dairy, gluten, …).
     var triggerGroups: [TriggerIngredient]
+    /// Products, fabrics and materials from skin logs (phase 6), scored with the same rules.
+    var skinTriggers: [TriggerIngredient]
     var triggerCategories: [TriggerDomain]
     var mealsAnalyzed: Int
     var symptomLogsAnalyzed: Int
     var lastUpdated: Date
 
     static func empty(userId: String) -> AllergyProfile {
-        AllergyProfile(id: "current", userId: userId, triggerIngredients: [], triggerGroups: [],
+        AllergyProfile(id: "current", userId: userId, triggerIngredients: [], triggerGroups: [], skinTriggers: [],
                        triggerCategories: [], mealsAnalyzed: 0, symptomLogsAnalyzed: 0, lastUpdated: .now)
     }
 
     var likelyTriggers: [TriggerIngredient] { triggerIngredients.filter { $0.status == .likely } }
+    var likelySkinTriggers: [TriggerIngredient] { skinTriggers.filter { $0.status == .likely } }
 }

@@ -11,6 +11,14 @@ extension SkinLog: FetchableRecord, PersistableRecord { static let databaseTable
 extension BloodworkRecord: FetchableRecord, PersistableRecord { static let databaseTableName = "bloodworkRecord" }
 extension DineCode: FetchableRecord, PersistableRecord { static let databaseTableName = "dineCode" }
 
+/// Everything pulled from Firestore when signing in on a fresh device.
+struct RemoteHistory {
+    var meals: [MealEntry] = []
+    var symptoms: [SymptomLog] = []
+    var skinLogs: [SkinLog] = []
+    var bloodwork: [BloodworkRecord] = []
+}
+
 /// Offline-first local store (SQLite via GRDB). This is the app's source of truth;
 /// `SyncService` mirrors dirty rows (`needsSync = 1`) to Firestore when online.
 final class LocalDatabase {
@@ -106,6 +114,33 @@ final class LocalDatabase {
                 t.column("isActive", .boolean).notNull()
             }
         }
+        migrator.registerMigration("v2-phase6") { db in
+            // skinLog had no screens or writers before phase 6, so it is recreated in its final shape
+            // (a list of exposures + reactions) rather than altered.
+            try db.drop(table: "skinLog")
+            try db.create(table: "skinLog") { t in
+                t.column("id", .text).primaryKey()
+                t.column("userId", .text).notNull().indexed()
+                t.column("photoURL", .text)
+                t.column("localPhotoName", .text)
+                t.column("timestamp", .datetime).notNull().indexed()
+                t.column("exposures", .text).notNull()
+                t.column("reactions", .text).notNull()
+                t.column("bodyAreas", .text).notNull()
+                t.column("severity", .integer).notNull()
+                t.column("notes", .text).notNull()
+                t.column("needsSync", .boolean).notNull().defaults(to: true)
+            }
+            try db.alter(table: "bloodworkRecord") { t in
+                t.add(column: "labName", .text)
+                t.add(column: "localDocName", .text)
+                t.add(column: "sourceDocType", .text)
+                t.add(column: "notes", .text).notNull().defaults(to: "")
+            }
+            try db.alter(table: "allergyProfile") { t in
+                t.add(column: "skinTriggers", .text).notNull().defaults(to: "[]")
+            }
+        }
         return migrator
     }
 
@@ -155,6 +190,38 @@ final class LocalDatabase {
         _ = try dbQueue.write { try SymptomLog.deleteOne($0, key: id) }
     }
 
+    // MARK: - Skin
+
+    func skinLogs(userId: String) throws -> [SkinLog] {
+        try dbQueue.read { db in
+            try SkinLog.filter(Column("userId") == userId).order(Column("timestamp").desc).fetchAll(db)
+        }
+    }
+
+    func save(_ log: SkinLog) throws {
+        try dbQueue.write { try log.save($0) }
+    }
+
+    func deleteSkinLog(id: String) throws {
+        _ = try dbQueue.write { try SkinLog.deleteOne($0, key: id) }
+    }
+
+    // MARK: - Blood work
+
+    func bloodwork(userId: String) throws -> [BloodworkRecord] {
+        try dbQueue.read { db in
+            try BloodworkRecord.filter(Column("userId") == userId).order(Column("testDate").desc).fetchAll(db)
+        }
+    }
+
+    func save(_ record: BloodworkRecord) throws {
+        try dbQueue.write { try record.save($0) }
+    }
+
+    func deleteBloodwork(id: String) throws {
+        _ = try dbQueue.write { try BloodworkRecord.deleteOne($0, key: id) }
+    }
+
     // MARK: - Profile
 
     func allergyProfile(userId: String) throws -> AllergyProfile? {
@@ -190,6 +257,28 @@ final class LocalDatabase {
         try dbQueue.read { try SymptomLog.filter(Column("needsSync") == true).fetchAll($0) }
     }
 
+    func unsyncedSkinLogs() throws -> [SkinLog] {
+        try dbQueue.read { try SkinLog.filter(Column("needsSync") == true).fetchAll($0) }
+    }
+
+    func unsyncedBloodwork() throws -> [BloodworkRecord] {
+        try dbQueue.read { try BloodworkRecord.filter(Column("needsSync") == true).fetchAll($0) }
+    }
+
+    func markSynced(skinLogId: String, photoURL: String?) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE skinLog SET needsSync = 0, photoURL = COALESCE(?, photoURL) WHERE id = ?",
+                           arguments: [photoURL, skinLogId])
+        }
+    }
+
+    func markSynced(bloodworkId: String, sourceDocURL: String?) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE bloodworkRecord SET needsSync = 0, sourceDocURL = COALESCE(?, sourceDocURL) WHERE id = ?",
+                           arguments: [sourceDocURL, bloodworkId])
+        }
+    }
+
     func markSynced(mealId: String, photoURL: String?) throws {
         try dbQueue.write { db in
             try db.execute(sql: "UPDATE mealEntry SET needsSync = 0, photoURL = COALESCE(?, photoURL) WHERE id = ?",
@@ -202,17 +291,27 @@ final class LocalDatabase {
     }
 
     /// Replace local rows with what the server has (used after signing in on a fresh device).
-    func importFromRemote(meals: [MealEntry], symptoms: [SymptomLog]) throws {
+    func importFromRemote(_ history: RemoteHistory) throws {
         try dbQueue.write { db in
-            for var meal in meals {
+            for var meal in history.meals {
                 guard try !MealEntry.exists(db, key: meal.id) else { continue }
                 meal.needsSync = false
                 try meal.insert(db)
             }
-            for var log in symptoms {
+            for var log in history.symptoms {
                 guard try !SymptomLog.exists(db, key: log.id) else { continue }
                 log.needsSync = false
                 try log.insert(db)
+            }
+            for var log in history.skinLogs {
+                guard try !SkinLog.exists(db, key: log.id) else { continue }
+                log.needsSync = false
+                try log.insert(db)
+            }
+            for var record in history.bloodwork {
+                guard try !BloodworkRecord.exists(db, key: record.id) else { continue }
+                record.needsSync = false
+                try record.insert(db)
             }
         }
     }

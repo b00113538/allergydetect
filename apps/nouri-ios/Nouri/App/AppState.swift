@@ -11,6 +11,8 @@ final class AppState: ObservableObject {
     @Published private(set) var user: User?
     @Published private(set) var meals: [MealEntry] = []
     @Published private(set) var symptoms: [SymptomLog] = []
+    @Published private(set) var skinLogs: [SkinLog] = []
+    @Published private(set) var bloodwork: [BloodworkRecord] = []
     @Published private(set) var profile: AllergyProfile?
     @Published private(set) var dineCode: DineCode?
     @Published var lastError: String?
@@ -21,25 +23,29 @@ final class AppState: ObservableObject {
     let database: LocalDatabase
     let firebase: FirebaseService?
     let vision: IngredientRecognizing
+    let bloodworkReader: BloodworkReading
     private let detector = PatternDetectionService()
 
     private static let localUserKey = "nouri.localUserId"
 
     var isDemoMode: Bool { firebase == nil }
 
-    init(database: LocalDatabase, firebase: FirebaseService?, vision: IngredientRecognizing) {
+    init(database: LocalDatabase, firebase: FirebaseService?, vision: IngredientRecognizing,
+         bloodworkReader: BloodworkReading = DemoBloodworkService()) {
         self.database = database
         self.firebase = firebase
         self.vision = vision
+        self.bloodworkReader = bloodworkReader
     }
 
     static func live() -> AppState {
         let database: LocalDatabase
         do { database = try LocalDatabase.makeDefault() } catch { fatalError("Could not open local database: \(error)") }
         if AppEnvironment.isFirebaseConfigured {
-            return AppState(database: database, firebase: FirebaseService(), vision: ClaudeVisionService())
+            return AppState(database: database, firebase: FirebaseService(), vision: ClaudeVisionService(),
+                            bloodworkReader: ClaudeBloodworkService())
         }
-        return AppState(database: database, firebase: nil, vision: DemoVisionService())
+        return AppState(database: database, firebase: nil, vision: DemoVisionService(), bloodworkReader: DemoBloodworkService())
     }
 
     // MARK: - Session
@@ -56,7 +62,7 @@ final class AppState: ObservableObject {
             user = try? await firebase.fetchUser(uid: uid)
             if let user { try? database.save(user) }
             if let history = try? await firebase.fetchHistory(uid: uid) {
-                try? database.importFromRemote(meals: history.meals, symptoms: history.symptoms)
+                try? database.importFromRemote(history)
             }
         }
         if let user {
@@ -133,6 +139,8 @@ final class AppState: ObservableObject {
         user = nil
         meals = []
         symptoms = []
+        skinLogs = []
+        bloodwork = []
         profile = nil
         dineCode = nil
         phase = .signedOut
@@ -202,6 +210,80 @@ final class AppState: ObservableObject {
         meals.filter { now.timeIntervalSince($0.timestamp) <= hours * 3600 && $0.timestamp <= now }
     }
 
+    // MARK: - Skin (phase 6)
+
+    func logSkin(photo: UIImage?, exposures: [SkinExposure], reactions: [SkinReaction], bodyAreas: [BodyArea],
+                 severity: Int, notes: String, timestamp: Date = .now) {
+        guard let user else { return }
+        let id = UUID().uuidString
+        let photoName = photo.flatMap { try? PhotoStore.save($0, id: id) }
+        let log = SkinLog(id: id, userId: user.id, localPhotoName: photoName, timestamp: timestamp, exposures: exposures,
+                          reactions: reactions, bodyAreas: bodyAreas, severity: severity, notes: notes)
+        do {
+            try database.save(log)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        reload()
+        syncInBackground()
+    }
+
+    func deleteSkinLog(_ log: SkinLog) {
+        try? database.deleteSkinLog(id: log.id)
+        if let name = log.localPhotoName { PhotoStore.delete(named: name) }
+        if let firebase, let uid = user?.id { Task { await firebase.deleteSkinLog(id: log.id, uid: uid) } }
+        reload()
+    }
+
+    /// Everything the user has logged before, most-used first — offered as one-tap picks.
+    func recentSkinExposures(limit: Int = 12) -> [SkinExposure] {
+        var counts: [String: (exposure: SkinExposure, count: Int)] = [:]
+        for exposure in skinLogs.flatMap(\.exposures) {
+            counts[exposure.id, default: (exposure: exposure, count: 0)].count += 1
+        }
+        return counts.values.sorted { $0.count > $1.count }.prefix(limit).map(\.exposure)
+    }
+
+    // MARK: - Blood work (phase 6)
+
+    func extractBloodwork(document: Data, type: BloodworkRecord.DocumentType) async throws -> BloodworkExtraction {
+        try await bloodworkReader.extractPanel(document: document, type: type)
+    }
+
+    @discardableResult
+    func saveBloodwork(document: Data?, type: BloodworkRecord.DocumentType?, testDate: Date, labName: String?,
+                       results: [BloodworkRecord.PanelResult], notes: String) -> BloodworkRecord? {
+        guard let user else { return nil }
+        let id = UUID().uuidString
+        var docName: String?
+        if let document, let type { docName = try? DocumentStore.save(document, id: id, type: type) }
+        let record = BloodworkRecord(id: id, userId: user.id, testDate: testDate, labName: labName, panelResults: results,
+                                     localDocName: docName, sourceDocType: docName == nil ? nil : type, notes: notes)
+        do {
+            try database.save(record)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+        reload()
+        syncInBackground()
+        Task { await refreshPublishedDineCode() }
+        return record
+    }
+
+    func deleteBloodwork(_ record: BloodworkRecord) {
+        try? database.deleteBloodwork(id: record.id)
+        if let name = record.localDocName { DocumentStore.delete(named: name) }
+        if let firebase, let uid = user?.id { Task { await firebase.deleteBloodwork(record, uid: uid) } }
+        reload()
+        Task { await refreshPublishedDineCode() }
+    }
+
+    var bloodworkFindings: [BloodworkFinding] {
+        BloodworkInsights.findings(records: bloodwork, profile: profile)
+    }
+
     // MARK: - Profile
 
     /// Reloads from SQLite and re-runs pattern detection. Cheap at MVP data sizes (hundreds of rows).
@@ -209,10 +291,12 @@ final class AppState: ObservableObject {
         guard let user else { return }
         meals = (try? database.meals(userId: user.id)) ?? []
         symptoms = (try? database.symptoms(userId: user.id)) ?? []
+        skinLogs = (try? database.skinLogs(userId: user.id)) ?? []
+        bloodwork = (try? database.bloodwork(userId: user.id)) ?? []
         dineCode = try? database.activeDineCode(userId: user.id)
 
         let previous = profile ?? (try? database.allergyProfile(userId: user.id))
-        let updated = detector.analyze(meals: meals, symptoms: symptoms, userId: user.id)
+        let updated = detector.analyze(meals: meals, symptoms: symptoms, skinLogs: skinLogs, userId: user.id)
         profile = updated
         try? database.save(updated)
 
@@ -235,7 +319,7 @@ final class AppState: ObservableObject {
             if let firebase { try? await firebase.deactivateDineCode(existing) }
         }
         let token = DineCodeService.makeToken()
-        let snapshot = DineCodeService.snapshot(user: user, profile: profile)
+        let snapshot = DineCodeService.snapshot(user: user, profile: profile, bloodwork: bloodwork)
         let payload = firebase == nil
             ? DineCodeService.offlinePayloadURL(snapshot: snapshot)
             : DineCodeService.payloadURL(token: token)
@@ -261,7 +345,7 @@ final class AppState: ObservableObject {
     /// Keeps the public snapshot behind an existing QR in step with the latest profile.
     private func refreshPublishedDineCode() async {
         guard let user, var code = dineCode, code.isActive else { return }
-        let snapshot = DineCodeService.snapshot(user: user, profile: profile)
+        let snapshot = DineCodeService.snapshot(user: user, profile: profile, bloodwork: bloodwork)
         if let firebase {
             try? await firebase.publishDineCode(code, snapshot: snapshot)
         } else {
@@ -285,12 +369,15 @@ final class AppState: ObservableObject {
 
     // MARK: - Demo data
 
-    /// Seeds ~3 weeks of realistic history (dairy-sensitive user) so the profile has something to show.
+    /// Seeds ~3 weeks of realistic history (dairy-sensitive user who reacts to wool, plus one allergy
+    /// panel) so every Insights tab has something to show.
     func loadSampleData() {
         guard let user else { return }
         let (meals, symptoms) = SampleData.history(userId: user.id)
         for meal in meals { try? database.save(meal) }
         for log in symptoms { try? database.save(log) }
+        for log in SampleData.skinHistory(userId: user.id) { try? database.save(log) }
+        try? database.save(SampleData.bloodworkRecord(userId: user.id))
         reload()
         syncInBackground()
     }

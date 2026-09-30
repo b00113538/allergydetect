@@ -9,10 +9,13 @@ import FirebaseStorage
 ///   users/{uid}                       – User
 ///   users/{uid}/meals/{mealId}        – MealEntry
 ///   users/{uid}/symptoms/{logId}      – SymptomLog
+///   users/{uid}/skinLogs/{logId}      – SkinLog
+///   users/{uid}/bloodwork/{recordId}  – BloodworkRecord
 ///   users/{uid}/profile/current       – AllergyProfile
 ///   users/{uid}/dineCodes/{id}        – DineCode (private bookkeeping)
 ///   dineCodes/{token}                 – DineCodeSnapshot (public, get-only)
-/// Storage: users/{uid}/meals/{mealId}.jpg
+/// Storage: users/{uid}/meals/{mealId}.jpg, users/{uid}/skin/{logId}.jpg,
+///          users/{uid}/bloodwork/{recordId}.pdf|jpg
 final class FirebaseService {
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
@@ -43,6 +46,7 @@ final class FirebaseService {
         var data = try Firestore.Encoder().encode(value)
         data.removeValue(forKey: "needsSync")          // local bookkeeping only
         data.removeValue(forKey: "localPhotoName")
+        data.removeValue(forKey: "localDocName")
         return data
     }
 
@@ -66,7 +70,7 @@ final class FirebaseService {
             do {
                 var remote = meal
                 if remote.photoURL == nil, let name = meal.localPhotoName, let data = PhotoStore.data(named: name) {
-                    remote.photoURL = try await uploadMealPhoto(data, uid: uid, mealId: meal.id)
+                    remote.photoURL = try await upload(data, path: "users/\(uid)/meals/\(meal.id).jpg", contentType: "image/jpeg")
                 }
                 try await userDoc(uid).collection("meals").document(meal.id).setData(try encode(remote))
                 try database.markSynced(mealId: meal.id, photoURL: remote.photoURL)
@@ -82,6 +86,36 @@ final class FirebaseService {
                 print("[Sync] symptom \(log.id) failed: \(error)")
             }
         }
+        for log in (try? database.unsyncedSkinLogs()) ?? [] where log.userId == uid {
+            do {
+                var remote = log
+                if remote.photoURL == nil, let name = log.localPhotoName, let data = PhotoStore.data(named: name) {
+                    remote.photoURL = try await upload(data, path: "users/\(uid)/skin/\(log.id).jpg", contentType: "image/jpeg")
+                }
+                try await userDoc(uid).collection("skinLogs").document(log.id).setData(try encode(remote))
+                try database.markSynced(skinLogId: log.id, photoURL: remote.photoURL)
+            } catch {
+                print("[Sync] skin log \(log.id) failed: \(error)")
+            }
+        }
+        for record in (try? database.unsyncedBloodwork()) ?? [] where record.userId == uid {
+            do {
+                var remote = record
+                if remote.sourceDocURL == nil, let name = record.localDocName, let type = record.sourceDocType,
+                   let data = DocumentStore.data(named: name) {
+                    remote.sourceDocURL = try await upload(data, path: Self.bloodworkPath(uid: uid, record: record, type: type),
+                                                           contentType: type.mimeType)
+                }
+                try await userDoc(uid).collection("bloodwork").document(record.id).setData(try encode(remote))
+                try database.markSynced(bloodworkId: record.id, sourceDocURL: remote.sourceDocURL)
+            } catch {
+                print("[Sync] blood work \(record.id) failed: \(error)")
+            }
+        }
+    }
+
+    private static func bloodworkPath(uid: String, record: BloodworkRecord, type: BloodworkRecord.DocumentType) -> String {
+        "users/\(uid)/bloodwork/\(record.id).\(type.fileExtension)"
     }
 
     func deleteMeal(id: String, uid: String) async {
@@ -93,28 +127,43 @@ final class FirebaseService {
         try? await userDoc(uid).collection("symptoms").document(id).delete()
     }
 
+    func deleteSkinLog(id: String, uid: String) async {
+        try? await userDoc(uid).collection("skinLogs").document(id).delete()
+        try? await storage.reference(withPath: "users/\(uid)/skin/\(id).jpg").delete()
+    }
+
+    func deleteBloodwork(_ record: BloodworkRecord, uid: String) async {
+        try? await userDoc(uid).collection("bloodwork").document(record.id).delete()
+        if let type = record.sourceDocType {
+            try? await storage.reference(withPath: Self.bloodworkPath(uid: uid, record: record, type: type)).delete()
+        }
+    }
+
     /// Pulls history on sign-in so a new device starts with the user's data.
-    func fetchHistory(uid: String) async throws -> (meals: [MealEntry], symptoms: [SymptomLog]) {
-        let meals = try await userDoc(uid).collection("meals").getDocuments().documents.compactMap { doc -> MealEntry? in
+    func fetchHistory(uid: String) async throws -> RemoteHistory {
+        RemoteHistory(
+            meals: try await fetchAll(MealEntry.self, collection: "meals", uid: uid),
+            symptoms: try await fetchAll(SymptomLog.self, collection: "symptoms", uid: uid),
+            skinLogs: try await fetchAll(SkinLog.self, collection: "skinLogs", uid: uid),
+            bloodwork: try await fetchAll(BloodworkRecord.self, collection: "bloodwork", uid: uid)
+        )
+    }
+
+    private func fetchAll<T: Decodable>(_ type: T.Type, collection: String, uid: String) async throws -> [T] {
+        try await userDoc(uid).collection(collection).getDocuments().documents.compactMap { doc -> T? in
             var data = doc.data()
             data["needsSync"] = false
-            return try? Firestore.Decoder().decode(MealEntry.self, from: data)
+            return try? Firestore.Decoder().decode(T.self, from: data)
         }
-        let symptoms = try await userDoc(uid).collection("symptoms").getDocuments().documents.compactMap { doc -> SymptomLog? in
-            var data = doc.data()
-            data["needsSync"] = false
-            return try? Firestore.Decoder().decode(SymptomLog.self, from: data)
-        }
-        return (meals, symptoms)
     }
 
     // MARK: Storage
 
-    func uploadMealPhoto(_ jpeg: Data, uid: String, mealId: String) async throws -> String {
-        let ref = storage.reference(withPath: "users/\(uid)/meals/\(mealId).jpg")
+    func upload(_ data: Data, path: String, contentType: String) async throws -> String {
+        let ref = storage.reference(withPath: path)
         let metadata = StorageMetadata()
-        metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(jpeg, metadata: metadata)
+        metadata.contentType = contentType
+        _ = try await ref.putDataAsync(data, metadata: metadata)
         return try await ref.downloadURL().absoluteString
     }
 
