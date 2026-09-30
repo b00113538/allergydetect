@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Everything a user logs is private to them.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+      match /{collection}/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Public Dine Code snapshots. The document id is an unguessable 128-bit+ token, so the QR code
+    // itself is the capability: anyone holding the URL may `get` it, nobody may `list`/query.
+    match /dineCodes/{token} {
+      allow get: if resource.data.isActive == true || isOwner(resource.data.ownerUid);
+      allow list: if false;
+      allow create: if isOwner(request.resource.data.ownerUid) && token.size() >= 22;
+      allow update: if isOwner(resource.data.ownerUid)
+                    && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isOwner(resource.data.ownerUid);
+    }
+  }
+}

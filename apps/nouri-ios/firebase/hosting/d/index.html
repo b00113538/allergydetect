@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Nouri Dine Code</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --bg: #F6F1E7; --surface: #FFFDF8; --primary: #6B8F71; --accent: #B8923A;
+      --text: #1F2B24; --muted: #5C6B61; --border: #E4DCCB;
+      --danger: #B4533F; --warning: #C98A2E;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #10231E; --surface: #17312A; --primary: #3E9B82; --accent: #CDAD5E;
+        --text: #E8EFE8; --muted: #A9BAB0; --border: #24453B;
+        --danger: #E07A62; --warning: #E0B45C;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 17px/1.5 Inter, -apple-system, system-ui, sans-serif;
+    }
+    main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+    .brand { display: flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; letter-spacing: .04em; font-size: 13px; text-transform: uppercase; }
+    .brand svg { width: 18px; height: 18px; }
+    h1 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 36px; line-height: 1.15; margin: 14px 0 6px; }
+    .lead { color: var(--muted); margin: 0 0 22px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 8px 18px; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    li:last-child { border-bottom: 0; }
+    .name { font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+    .tag { flex: none; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+    .tag.confirmed { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+    .tag.likely { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
+    .tag.watching { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+    .note { margin: 20px 0 0; padding: 14px 16px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 12px 12px 0; }
+    .legend { color: var(--muted); font-size: 14px; margin-top: 20px; }
+    .legend p { margin: 4px 0; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 28px; }
+    .state { text-align: center; padding: 48px 0; color: var(--muted); }
+    [hidden] { display: none !important; }
+    @media print {
+      body { background: #fff; color: #000; }
+      .card, .note { border-color: #999; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 8C8 10 5.9 16.2 3.8 21.3l1.9.7.9-2.3c.5.2 1 .3 1.4.3C19 20 22 3 22 3c-1 2-8 2.3-13 3.3S2 11.5 2 13.5s1.8 3.8 1.8 3.8C7 8 17 8 17 8z"/></svg>
+    Nouri Dine Code
+  </div>
+
+  <div id="loading" class="state">Loading…</div>
+
+  <section id="profile" hidden>
+    <h1 id="title"></h1>
+    <p class="lead">Please make sure this meal does not contain the following:</p>
+    <div class="card"><ul id="items"></ul></div>
+    <p id="note" class="note"></p>
+    <div class="legend">
+      <p><strong>Confirmed allergy</strong> — must be avoided completely, including traces.</p>
+      <p><strong>Likely trigger</strong> — has repeatedly caused reactions; please avoid.</p>
+      <p><strong>Watching</strong> — possible sensitivity; avoid if easy to do so.</p>
+    </div>
+    <p id="meta" class="meta"></p>
+  </section>
+
+  <section id="empty" class="state" hidden>
+    <h1>Nothing to avoid</h1>
+    <p>This guest hasn't listed any allergies or triggers yet.</p>
+  </section>
+
+  <section id="inactive" class="state" hidden>
+    <h1>Code not active</h1>
+    <p>This Dine Code has been turned off or replaced. Please ask the guest for their current code.</p>
+  </section>
+
+  <section id="error" class="state" hidden>
+    <h1>Couldn't load</h1>
+    <p>Check your connection and try again. If it keeps happening, please ask the guest directly about their allergies.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function show(id) {
+    ["loading", "profile", "empty", "inactive", "error"].forEach(function (s) { $(s).hidden = s !== id; });
+  }
+
+  function levelClass(level) {
+    if (level === "Confirmed allergy") return "confirmed";
+    if (level === "Likely trigger") return "likely";
+    return "watching";
+  }
+
+  function render(p) {
+    if (!p.isActive) return show("inactive");
+    if (!p.avoid.length) return show("empty");
+    $("title").textContent = p.displayName ? p.displayName + "'s dietary needs" : "Dietary needs";
+    var list = $("items");
+    list.textContent = "";
+    p.avoid.forEach(function (item) {
+      var li = document.createElement("li");
+      var name = document.createElement("span");
+      name.className = "name";
+      name.textContent = item.name;
+      var tag = document.createElement("span");
+      tag.className = "tag " + levelClass(item.level);
+      tag.textContent = item.level;
+      li.appendChild(name);
+      li.appendChild(tag);
+      list.appendChild(li);
+    });
+    $("note").textContent = p.note || "Please avoid these ingredients, including traces and shared cooking surfaces where possible.";
+    $("note").hidden = false;
+    $("meta").textContent = p.updatedAt
+      ? "Last updated " + new Date(p.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
+      : "";
+    document.title = $("title").textContent + " · Nouri";
+    show("profile");
+  }
+
+  // Demo / offline codes carry the profile in the URL fragment: #p=<base64url JSON {n, a:[[name, level]]}>.
+  function fromFragment() {
+    var m = location.hash.match(/^#p=([A-Za-z0-9_-]+)$/);
+    if (!m) return null;
+    try {
+      var b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      while (b64.length % 4) b64 += "=";
+      var bytes = Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); });
+      var data = JSON.parse(new TextDecoder().decode(bytes));
+      return {
+        isActive: true,
+        displayName: String(data.n || ""),
+        avoid: (data.a || []).map(function (x) { return { name: String(x[0]), level: String(x[1]) }; }),
+        note: "",
+        updatedAt: null
+      };
+    } catch (e) { return null; }
+  }
+
+  // Firestore REST typed-value → plain JS.
+  function val(v) {
+    if (!v) return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("booleanValue" in v) return v.booleanValue;
+    if ("integerValue" in v) return Number(v.integerValue);
+    if ("doubleValue" in v) return v.doubleValue;
+    if ("timestampValue" in v) return v.timestampValue;
+    if ("nullValue" in v) return null;
+    if ("arrayValue" in v) return (v.arrayValue.values || []).map(val);
+    if ("mapValue" in v) {
+      var out = {}, f = v.mapValue.fields || {};
+      Object.keys(f).forEach(function (k) { out[k] = val(f[k]); });
+      return out;
+    }
+    return null;
+  }
+
+  function projectId() {
+    var meta = document.querySelector('meta[name="nouri-project-id"]');
+    if (meta && meta.content) return Promise.resolve(meta.content);
+    // Firebase Hosting serves the project config at this reserved URL.
+    return fetch("/__/firebase/init.json").then(function (r) {
+      if (!r.ok) throw new Error("no init.json");
+      return r.json();
+    }).then(function (c) { return c.projectId; });
+  }
+
+  function load() {
+    var inline = fromFragment();
+    if (inline) return render(inline);
+
+    var token = location.pathname.replace(/\/+$/, "").split("/").pop();
+    if (!/^[A-Za-z0-9]{22,64}$/.test(token || "")) return show("inactive");
+
+    projectId().then(function (pid) {
+      var url = "https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(pid) +
+        "/databases/(default)/documents/dineCodes/" + token;
+      return fetch(url, { cache: "no-store" });
+    }).then(function (r) {
+      // Rules deny reads of inactive codes; missing docs 404. Both mean "not active".
+      if (r.status === 403 || r.status === 404) return show("inactive");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json().then(function (doc) {
+        var p = val({ mapValue: { fields: doc.fields || {} } });
+        render({
+          isActive: p.isActive === true,
+          displayName: p.displayName || "",
+          avoid: (p.avoid || []).filter(Boolean),
+          note: p.note || "",
+          updatedAt: p.updatedAt
+        });
+      });
+    }).catch(function () { show("error"); });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

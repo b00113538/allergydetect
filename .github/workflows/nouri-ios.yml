@@ -1,0 +1,89 @@
+name: Nouri iOS
+
+on:
+  pull_request:
+    paths:
+      - "apps/nouri-ios/**"
+      - ".github/workflows/nouri-ios.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/nouri-ios/**"
+      - ".github/workflows/nouri-ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: nouri-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Build & test (iOS simulator)
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/nouri-ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/nouri-ios/.spm
+          key: spm-${{ runner.os }}-${{ hashFiles('apps/nouri-ios/project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Pick a simulator
+        id: sim
+        run: |
+          # First available iPhone simulator on the runner's default runtime.
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(dev["udid"] for rt in sorted(d, reverse=True) if "iOS" in rt for dev in d[rt] if dev["name"].startswith("iPhone")))')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$UDID"
+
+      - name: Build and run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Nouri.xcodeproj \
+            -scheme Nouri \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -clonedSourcePackagesDirPath .spm \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee xcodebuild.log | grep -E "error:|warning: .*Nouri/|Test Case|Executed|\*\* (BUILD|TEST)"
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: apps/nouri-ios/xcodebuild.log
+
+  functions:
+    name: Cloud Functions typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/nouri-ios/firebase/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/nouri-ios/firebase/functions/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
