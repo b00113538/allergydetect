@@ -1,21 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
-
-// Set with: firebase functions:secrets:set ANTHROPIC_API_KEY
-const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
+import { ALLOWED_MEDIA_TYPES, ANTHROPIC_API_KEY, MAX_BASE64_LENGTH, MODEL, type MediaType } from "./claude";
 
 // Push notifications: evening reminder + weekly summary (see push.ts).
 export { sendScheduledPushes } from "./push";
 // In-app account deletion (App Store guideline 5.1.1(v)); see account.ts.
 export { deleteAccount } from "./account";
-
-const MODEL = "claude-opus-5-5";
-const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-type MediaType = (typeof ALLOWED_MEDIA_TYPES)[number];
-// ~5 MB decoded; the app sends ≤1568px JPEGs, typically 200–600 KB.
-const MAX_BASE64_LENGTH = 7_000_000;
+// Phase 6+: skin product / clothing label reading; see label.ts.
+export { readProductLabel } from "./label";
 
 const SYSTEM_PROMPT = `You identify the ingredients in photos of meals for a food-allergy tracking app.
 The user's list is used to correlate foods with symptoms, so include ingredients that are likely present even if not directly visible — sauces, dressings, oils, butter, breading, marinades, typical seasonings — when the dish strongly implies them. Mark those with visible=false and a lower confidence.

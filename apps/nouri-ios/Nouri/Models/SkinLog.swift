@@ -30,6 +30,17 @@ enum SkinExposureKind: String, Codable, CaseIterable, Identifiable {
 struct SkinExposure: Codable, Hashable, Identifiable {
     var name: String
     var kind: SkinExposureKind
+    /// Ingredients or fibres read from the product's label, in label order (nil = never scanned).
+    var ingredients: [String]?
+
+    init(name: String, kind: SkinExposureKind, ingredients: [String]? = nil) {
+        self.name = name
+        self.kind = kind
+        self.ingredients = ingredients
+    }
+
+    /// Contact-allergen groups this exposure brings (from its name and its label).
+    var contactGroups: Set<ContactAllergenGroup> { ContactAllergenDatabase.groups(for: self) }
 
     var id: String { "\(kind.rawValue):\(IngredientNormalizer.canonicalKey(name))" }
 }

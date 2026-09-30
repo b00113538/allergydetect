@@ -6,7 +6,8 @@ final class LocalDatabaseTests: XCTestCase {
     func testSkinLogRoundTrip() throws {
         let db = try LocalDatabase()
         let log = SkinLog(userId: "u1", timestamp: Date(timeIntervalSince1970: 1_750_000_000),
-                          exposures: [SkinExposure(name: "Wool jumper", kind: .fabric), SkinExposure(name: "Sunscreen", kind: .product)],
+                          exposures: [SkinExposure(name: "Wool jumper", kind: .fabric),
+                                      SkinExposure(name: "Sunscreen", kind: .product, ingredients: ["Aqua", "Parfum"])],
                           reactions: [.itching, .redness], bodyAreas: [.arms], severity: 3, notes: "after the gym")
         try db.save(log)
 
@@ -45,5 +46,7 @@ final class LocalDatabaseTests: XCTestCase {
         let profile = PatternDetectionService().analyze(meals: [], symptoms: [], skinLogs: logs, userId: "u1")
         try db.save(profile)
         XCTAssertEqual(try db.allergyProfile(userId: "u1")?.skinTriggers, profile.skinTriggers)
+        XCTAssertEqual(try db.allergyProfile(userId: "u1")?.skinGroupTriggers, profile.skinGroupTriggers)
+        XCTAssertEqual(profile.skinGroupTriggers.first?.contactGroup, .wool)
     }
 }

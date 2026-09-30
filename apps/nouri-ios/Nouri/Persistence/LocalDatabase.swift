@@ -141,6 +141,12 @@ final class LocalDatabase {
                 t.add(column: "skinTriggers", .text).notNull().defaults(to: "[]")
             }
         }
+        migrator.registerMigration("v3-skin-labels") { db in
+            // Label ingredients live inside the existing skinLog.exposures JSON; only the profile grows.
+            try db.alter(table: "allergyProfile") { t in
+                t.add(column: "skinGroupTriggers", .text).notNull().defaults(to: "[]")
+            }
+        }
         return migrator
     }
 

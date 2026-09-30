@@ -18,7 +18,9 @@ apps/nouri-ios/
       BloodworkReaderService  lab report PDF/photo → IgE results (via Cloud Function) + DemoBloodworkService
       BloodworkInsights       compares blood test results with the logged patterns
       AllergenDatabase        curated allergen lookup, flags high-risk ingredients offline
-      PatternDetectionService correlation engine (food + skin/fabric) + weekly trends
+      PatternDetectionService correlation engine (food + skin/fabric + contact-allergen groups) + weekly trends
+      ContactAllergenDatabase contact-dermatitis groups (fragrance, preservatives, wool, nickel, …)
+      ProductLabelService     label photo → ingredients (via Cloud Function) + DemoProductLabelService
       FirebaseService         Auth, Firestore sync, Storage uploads, Dine Code publishing
       QRCodeService           CoreImage CIQRCodeGenerator
       DineCodeService         token generation + public snapshot
@@ -29,7 +31,7 @@ apps/nouri-ios/
   NouriTests/                 pattern detection (food + skin), allergen DB, blood work, SQLite round-trip tests
   firebase/
     firestore.rules, storage.rules, firebase.json
-    functions/                analyzeMealPhoto, extractBloodworkPanel, deleteAccount callables;
+    functions/                analyzeMealPhoto, extractBloodworkPanel, readProductLabel, deleteAccount callables;
                               sendScheduledPushes hourly job (TypeScript)
     hosting/d/index.html      Dine Code scan page (no app install needed)
     hosting/privacy, support  privacy policy + support pages (App Store URLs)
@@ -115,6 +117,30 @@ the same rules as foods (≥3 logs, ≥70% reaction rate, above the baseline of 
 roll up to the `skin` domain, fabrics and materials to `fabric`. Skin triggers are kept separate from food
 triggers, so they never appear on the Dine Code. Logs can include a photo, body areas and severity.
 
+**Product and care labels.** In a skin log, **Scan a label** reads the back of a bottle or a clothing care label. The
+photo goes to the `readProductLabel` callable. Claude transcribes the INCI ingredients (or the fibres and their
+percentages) exactly as printed, and the user reviews the list. On the phone, `ContactAllergenDatabase` maps each
+ingredient and each product or fabric name to common contact-allergen groups:
+- fragrance and the EU fragrance allergens (linalool, limonene and others)
+- isothiazolinones
+- formaldehyde releasers
+- parabens
+- lanolin
+- SLS
+- PPD
+- propylene glycol
+- essential oils
+- colophony
+- wool
+- synthetic fibres
+- latex
+- nickel
+
+`analyzeSkinGroups` scores these groups with the same rules as individual items, and the results are stored in
+`AllergyProfile.skinGroupTriggers`. Because of this, fragrance spread across a lotion, a shampoo and a detergent is
+flagged even when none of those products stands out on its own. A scanned product remembers its ingredients, so it
+only needs scanning once.
+
 **Blood work (phase 6).** The user scans a paper report (VisionKit document camera, multi-page → PDF),
 uploads a PDF, or picks a photo. The app sends it to the `extractBloodworkPanel` callable, which passes it
 to Claude as a `document` (PDF) or `image` block with a JSON schema: `{ testDate, labName, results: [{ allergen,
@@ -173,9 +199,4 @@ Built in for review:
 xcodebuild test -project Nouri.xcodeproj -scheme Nouri -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-Functions: `cd firebase/functions && npm run typecheck && npm test`. The tests cover the push scheduling helpers.
-
-## Next
-
-- Read ingredient labels on skin products (a photo of the back of the bottle through the same Claude pipeline).
-  That would let fragrance, lanolin or preservatives be tracked across different products.
+Functions: `cd firebase/functions && npm run typecheck && npm test`. The tests cover the push scheduling and label clean-up helpers.

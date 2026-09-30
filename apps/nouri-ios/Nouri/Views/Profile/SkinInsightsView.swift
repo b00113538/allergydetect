@@ -12,10 +12,12 @@ struct SkinInsightsView: View {
             HStack(spacing: 12) {
                 StatTile(value: "\(app.skinLogs.count)", label: "Skin logs")
                 StatTile(value: "\(app.skinLogs.filter(\.isReaction).count)", label: "Reactions")
-                StatTile(value: "\(app.profile?.likelySkinTriggers.count ?? 0)", label: "Likely triggers", tint: .nouriDanger)
+                StatTile(value: "\((app.profile?.likelySkinTriggers.count ?? 0) + (app.profile?.likelySkinGroups.count ?? 0))",
+                         label: "Likely triggers", tint: .nouriDanger)
             }
             Button { showLog = true } label: { Label("Log skin", systemImage: "hand.raised") }
                 .buttonStyle(.nouriSecondary)
+            groups
             triggers
             if !app.skinLogs.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
@@ -28,12 +30,26 @@ struct SkinInsightsView: View {
             }
             NouriCard {
                 Label("How skin tracking works", systemImage: "info.circle").font(NouriFont.label).foregroundStyle(Color.nouriTextPrimary)
-                Text("Each log lists what touched your skin and whether it reacted. Nouri scores every product, fabric and material the same way as foods: seen in 3+ logs, followed by a reaction 70%+ of the time, and more often than on your other days. Contact reactions can take a day or two to appear, so log the day's exposures when you notice a flare-up.")
+                Text("Each log lists what touched your skin and whether it reacted. Nouri scores every product, fabric and material the same way as foods: seen in 3+ logs, followed by a reaction 70%+ of the time, and more often than on your other days. Scanned labels are also rolled up into ingredient groups such as fragrance or preservatives, so a trigger hiding in several different products still shows up. Contact reactions can take a day or two to appear, so log the day's exposures when you notice a flare-up.")
                     .font(.footnote)
                     .foregroundStyle(Color.nouriTextSecondary)
             }
         }
         .sheet(isPresented: $showLog) { SkinLogView() }
+    }
+
+    /// Contact-allergen groups rolled up across products (from names and scanned labels).
+    @ViewBuilder
+    private var groups: some View {
+        let flagged = (app.profile?.skinGroupTriggers ?? []).filter { $0.exposures >= 2 && $0.status != .unlikely }
+        if !flagged.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Ingredients & materials").nouriHeading(.title3)
+                ForEach(flagged) { trigger in
+                    Button { selected = trigger } label: { TriggerRow(trigger: trigger) }.buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private var triggers: some View {

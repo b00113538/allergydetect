@@ -32,6 +32,13 @@ struct TriggerDetailView: View {
                         Text(trigger.allergenGroups.map(\.label).joined(separator: ", "))
                     }
                 }
+                if let group = trigger.contactGroup {
+                    Section("Found in") {
+                        let products = Dictionary(grouping: app.skinLogs.flatMap(\.exposures).filter { $0.contactGroups.contains(group) },
+                                                  by: \.id).values.compactMap(\.first).sorted { $0.name < $1.name }
+                        ForEach(products) { Label($0.name, systemImage: $0.kind.symbol) }
+                    }
+                }
                 if isSkin {
                     Section("Recent logs with it") {
                         ForEach(matchingSkinLogs.prefix(8)) { SkinLogRow(log: $0).listRowInsets(EdgeInsets()) }
@@ -60,6 +67,9 @@ struct TriggerDetailView: View {
     private var isSkin: Bool { trigger.domain != .food }
 
     private var matchingSkinLogs: [SkinLog] {
+        if let group = trigger.contactGroup {
+            return app.skinLogs.filter { log in log.exposures.contains { $0.contactGroups.contains(group) } }
+        }
         let key = IngredientNormalizer.canonicalKey(trigger.ingredient)
         return app.skinLogs.filter { log in
             log.exposures.contains { $0.kind.domain == trigger.domain && IngredientNormalizer.canonicalKey($0.name) == key }

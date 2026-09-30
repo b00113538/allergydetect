@@ -26,6 +26,7 @@ final class AppState: ObservableObject {
     let firebase: FirebaseService?
     let vision: IngredientRecognizing
     let bloodworkReader: BloodworkReading
+    let labelReader: ProductLabelReading
     private let detector = PatternDetectionService()
 
     private static let localUserKey = "nouri.localUserId"
@@ -33,11 +34,13 @@ final class AppState: ObservableObject {
     var isDemoMode: Bool { firebase == nil }
 
     init(database: LocalDatabase, firebase: FirebaseService?, vision: IngredientRecognizing,
-         bloodworkReader: BloodworkReading = DemoBloodworkService()) {
+         bloodworkReader: BloodworkReading = DemoBloodworkService(),
+         labelReader: ProductLabelReading = DemoProductLabelService()) {
         self.database = database
         self.firebase = firebase
         self.vision = vision
         self.bloodworkReader = bloodworkReader
+        self.labelReader = labelReader
         if firebase != nil {
             PushService.shared.onTokenChange = { [weak self] _ in
                 Task { await self?.uploadPushRegistration() }
@@ -50,7 +53,7 @@ final class AppState: ObservableObject {
         do { database = try LocalDatabase.makeDefault() } catch { fatalError("Could not open local database: \(error)") }
         if AppEnvironment.isFirebaseConfigured {
             return AppState(database: database, firebase: FirebaseService(), vision: ClaudeVisionService(),
-                            bloodworkReader: ClaudeBloodworkService())
+                            bloodworkReader: ClaudeBloodworkService(), labelReader: ClaudeProductLabelService())
         }
         return AppState(database: database, firebase: nil, vision: DemoVisionService(), bloodworkReader: DemoBloodworkService())
     }
@@ -300,13 +303,21 @@ final class AppState: ObservableObject {
         reload()
     }
 
-    /// Everything the user has logged before, most-used first — offered as one-tap picks.
+    /// Everything the user has logged before, most-used first — offered as one-tap picks. Each keeps
+    /// its most recently scanned label, so a product only needs scanning once.
     func recentSkinExposures(limit: Int = 12) -> [SkinExposure] {
         var counts: [String: (exposure: SkinExposure, count: Int)] = [:]
-        for exposure in skinLogs.flatMap(\.exposures) {
-            counts[exposure.id, default: (exposure: exposure, count: 0)].count += 1
+        for exposure in skinLogs.flatMap(\.exposures) {   // newest log first
+            var entry = counts[exposure.id] ?? (exposure: exposure, count: 0)
+            entry.count += 1
+            if entry.exposure.ingredients == nil, exposure.ingredients != nil { entry.exposure = exposure }
+            counts[exposure.id] = entry
         }
         return counts.values.sorted { $0.count > $1.count }.prefix(limit).map(\.exposure)
+    }
+
+    func readLabel(photo: UIImage) async throws -> ProductLabel {
+        try await labelReader.readLabel(photo: photo)
     }
 
     // MARK: - Blood work (phase 6)
