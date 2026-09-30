@@ -444,10 +444,17 @@ final class AppState: ObservableObject {
 
     // MARK: - Demo data
 
+    /// Sample history is offered in demo mode, and in real builds only to the App Review account
+    /// (so the reviewer sees populated insights). It's only offered while the account is empty.
+    var canLoadSampleData: Bool {
+        guard meals.isEmpty && symptoms.isEmpty && skinLogs.isEmpty else { return false }
+        return isDemoMode || AppEnvironment.isReviewerAccount(email: user?.email)
+    }
+
     /// Seeds ~3 weeks of realistic history (dairy-sensitive user who reacts to wool, plus one allergy
     /// panel) so every Insights tab has something to show.
     func loadSampleData() {
-        guard let user else { return }
+        guard let user, canLoadSampleData else { return }
         let (meals, symptoms) = SampleData.history(userId: user.id)
         for meal in meals { try? database.save(meal) }
         for log in symptoms { try? database.save(log) }

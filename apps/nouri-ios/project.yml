@@ -75,6 +75,8 @@ targets:
         NSPhotoLibraryUsageDescription: Choose a photo of a meal, a skin reaction or a test report to log it.
         # Base URL of the Dine Code scan page (Firebase Hosting). Override per build config if needed.
         NouriDineCodeBaseURL: https://nouri-app.web.app/d/
+        # App Review account (see AppStore/README.md). Filled from the NOURI_REVIEWER_EMAIL build setting.
+        NouriReviewerEmail: $(NOURI_REVIEWER_EMAIL)
         # The APNs token is handed to FCM explicitly in AppDelegate (see PushService).
         FirebaseAppDelegateProxyEnabled: false
         # Only standard HTTPS/TLS is used, which is exempt — skips the export-compliance prompt on every upload.
@@ -83,6 +85,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nouri.app
+        # When signed in with this email, release builds offer "Load sample history" so App Review sees
+        # populated insights. Empty = disabled. The TestFlight workflow sets it from the repo variable.
+        NOURI_REVIEWER_EMAIL: ""
         # iPhone only for v1 (an iPad build would also need iPad screenshots and layouts).
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

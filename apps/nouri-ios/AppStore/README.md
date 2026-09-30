@@ -68,22 +68,31 @@ No analytics, advertising or crash-reporting SDKs are included. If you add any l
 
 ## Notes for App Review
 
-App Review signs in with an account you give them, so create one with sample data first. Sign up in the app, then use the steps below to load sample history.
+App Review signs in with an account you provide, and it should already have data in it.
 
+**Set up the reviewer account (once):**
+1. Choose a dedicated email you control, e.g. `appreview@<your-domain>`.
+2. Build with that email in `NOURI_REVIEWER_EMAIL`:
+   - **TestFlight workflow:** add a repository variable `NOURI_REVIEWER_EMAIL` (Settings → Secrets and variables → Actions → Variables).
+   - **Local Xcode build:** set `NOURI_REVIEWER_EMAIL` under `settings.base` in `project.yml`.
+3. Install that build, **sign up with the reviewer email**, and finish onboarding.
+4. Open Insights → profile icon → **App Review account → Load sample history**. The app adds about three weeks of history (meals, symptoms, skin logs with scanned labels, and an allergy panel) and syncs it to Firebase, so the reviewer sees it on any device.
+
+The button appears only for that exact email, and only while the account is empty. Nobody else sees it, and it can't load the data twice. The sample dates count back from the day you load them, so do this shortly before submitting. That way the weekly chart looks current when the reviewer opens it.
+
+**Paste into App Store Connect → App Review Information:**
 ```
-Demo account: reviewer@<your-domain> / <password>
+Sign-in: appreview@<your-domain> / <password>
 
 Nouri is a symptom and food diary. It shows correlations between what the user logs and how they feel, and it does not diagnose. A disclaimer is shown on the welcome screen and in Profile.
 
 The demo account already has about three weeks of history, so Insights (Food, Skin, Blood work) is populated.
-Meal photos and uploaded allergy reports are analysed by the Claude API (Anthropic) via our Firebase backend; users review all extracted data before saving.
+Meal photos, product labels and uploaded allergy reports are analysed by the Claude API (Anthropic) via our Firebase backend; users review all extracted data before saving.
 Account deletion: Insights → profile icon → Delete account.
 Dine Code: Dine Code tab → Create; scanning the QR opens a web page listing foods to avoid.
 ```
 
-"Load sample history" only appears in demo mode (builds without Firebase). To fill the reviewer account, either:
-- log a few days of meals yourself, or
-- run a build without `GoogleService-Info.plist`, then ask me to add a one-off "seed this account" action for release.
+Don't delete the reviewer account. If it's ever reset, sign up again and reload the sample history.
 
 ## Screenshots
 
