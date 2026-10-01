@@ -57,6 +57,8 @@ targets:
         product: FirebaseFunctions
       - package: Firebase
         product: FirebaseMessaging
+      - package: Firebase
+        product: FirebaseAppCheck
       - package: GRDB
         product: GRDB
     entitlements:
@@ -64,6 +66,9 @@ targets:
       properties:
         # Xcode re-signs with "production" automatically when exporting for TestFlight / App Store.
         aps-environment: development
+        # App Attest for Firebase App Check. TestFlight / App Store builds always use the production
+        # App Attest environment regardless of this value.
+        com.apple.developer.devicecheck.appattest-environment: development
     info:
       path: Nouri/Resources/Info.plist
       properties:

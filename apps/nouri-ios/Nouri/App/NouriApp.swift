@@ -9,7 +9,8 @@ struct NouriApp: App {
 
     init() {
         // Must run before AppState creates FirebaseService (which touches Auth/Firestore).
-        if AppEnvironment.isFirebaseConfigured {
+        if AppEnvironment.isFirebaseConfigured && !AppEnvironment.isScreenshotMode {
+            AppCheckSetup.install()   // before configure(), so every Firebase request carries a token
             FirebaseApp.configure()
             PushService.shared.configure()
         }

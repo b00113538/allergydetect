@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "rootDir": ".", "outDir": "build-test", "sourceMap": false },
-  "include": ["src/pushLogic.ts", "src/labelLogic.ts", "test"]
+  "include": ["src/pushLogic.ts", "src/labelLogic.ts", "src/quotaLogic.ts", "test"]
 }

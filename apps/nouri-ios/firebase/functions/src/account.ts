@@ -1,4 +1,5 @@
 import "./admin";
+import { ENFORCE_APP_CHECK } from "./appCheck";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -12,10 +13,11 @@ import * as logger from "firebase-functions/logger";
  *     private Dine Code records, push devices)
  *   - public dineCodes/{token} snapshots owned by the user (so printed QR codes stop working)
  *   - Cloud Storage files under users/{uid}/ (meal/skin photos, blood work reports)
+ *   - the daily AI usage counter at rateLimits/{uid}
  *   - the Firebase Auth user
  * Order matters: data first, auth last, so a failure part-way can be retried by the still-signed-in user.
  */
-export const deleteAccount = onCall({ region: "us-central1", timeoutSeconds: 300 }, async (request) => {
+export const deleteAccount = onCall({ region: "us-central1", timeoutSeconds: 300, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Sign in to delete your account.");
   }
@@ -26,6 +28,7 @@ export const deleteAccount = onCall({ region: "us-central1", timeoutSeconds: 300
     const codes = await db.collection("dineCodes").where("ownerUid", "==", uid).get();
     await Promise.all(codes.docs.map((doc) => doc.ref.delete()));
     await db.recursiveDelete(db.collection("users").doc(uid));
+    await db.collection("rateLimits").doc(uid).delete();
     await getStorage().bucket().deleteFiles({ prefix: `users/${uid}/` });
     await getAuth().deleteUser(uid);
   } catch (err) {

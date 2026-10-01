@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { ALLOWED_MEDIA_TYPES, ANTHROPIC_API_KEY, MAX_BASE64_LENGTH, MODEL, type MediaType } from "./claude";
+import { ENFORCE_APP_CHECK } from "./appCheck";
+import { takeQuota, withRefund } from "./quota";
 
 // Push notifications: evening reminder + weekly summary (see push.ts).
 export { sendScheduledPushes } from "./push";
@@ -51,7 +53,7 @@ interface MealAnalysis {
  * Response: MealAnalysis
  */
 export const analyzeMealPhoto = onCall(
-  { secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 120, memory: "512MiB", region: "us-central1" },
+  { secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 120, memory: "512MiB", region: "us-central1", enforceAppCheck: ENFORCE_APP_CHECK },
   async (request): Promise<MealAnalysis> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in to analyse meal photos.");
@@ -67,69 +69,73 @@ export const analyzeMealPhoto = onCall(
       throw new HttpsError("invalid-argument", "Unsupported image type.");
     }
 
-    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+    const uid = request.auth.uid;
+    await takeQuota(uid, "mealPhoto");
+    return withRefund(uid, "mealPhoto", async () => {
+      const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
 
-    let response;
-    try {
-      response = await client.beta.messages.create({
-        model: MODEL,
-        max_tokens: 16000,
-        // Server-side refusal fallback: a declined request is retried on Anthropic's recommended model.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        output_config: {
-          effort: "medium",
-          format: { type: "json_schema", schema: MEAL_SCHEMA },
-        },
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mediaType as MediaType, data: imageBase64 } },
-              { type: "text", text: "List the likely ingredients in this meal." },
-            ],
+      let response;
+      try {
+        response = await client.beta.messages.create({
+          model: MODEL,
+          max_tokens: 16000,
+          // Server-side refusal fallback: a declined request is retried on Anthropic's recommended model.
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+          output_config: {
+            effort: "medium",
+            format: { type: "json_schema", schema: MEAL_SCHEMA },
           },
-        ],
-      });
-    } catch (err) {
-      if (err instanceof Anthropic.RateLimitError) {
-        throw new HttpsError("resource-exhausted", "Too many requests — try again in a moment.");
+          system: SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", media_type: mediaType as MediaType, data: imageBase64 } },
+                { type: "text", text: "List the likely ingredients in this meal." },
+              ],
+            },
+          ],
+        });
+      } catch (err) {
+        if (err instanceof Anthropic.RateLimitError) {
+          throw new HttpsError("resource-exhausted", "Too many requests — try again in a moment.");
+        }
+        if (err instanceof Anthropic.BadRequestError) {
+          logger.error("Claude rejected the request", { message: err.message });
+          throw new HttpsError("invalid-argument", "That image couldn't be processed.");
+        }
+        if (err instanceof Anthropic.APIError) {
+          logger.error("Claude API error", { status: err.status, message: err.message });
+          throw new HttpsError("unavailable", "Ingredient recognition is temporarily unavailable.");
+        }
+        throw err;
       }
-      if (err instanceof Anthropic.BadRequestError) {
-        logger.error("Claude rejected the request", { message: err.message });
-        throw new HttpsError("invalid-argument", "That image couldn't be processed.");
+
+      if (response.stop_reason === "refusal") {
+        throw new HttpsError("failed-precondition", "This photo couldn't be analysed. Please enter ingredients manually.");
       }
-      if (err instanceof Anthropic.APIError) {
-        logger.error("Claude API error", { status: err.status, message: err.message });
-        throw new HttpsError("unavailable", "Ingredient recognition is temporarily unavailable.");
+      if (response.stop_reason === "max_tokens") {
+        throw new HttpsError("internal", "The analysis was cut short. Please try again.");
       }
-      throw err;
-    }
 
-    if (response.stop_reason === "refusal") {
-      throw new HttpsError("failed-precondition", "This photo couldn't be analysed. Please enter ingredients manually.");
-    }
-    if (response.stop_reason === "max_tokens") {
-      throw new HttpsError("internal", "The analysis was cut short. Please try again.");
-    }
+      const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+      let parsed: MealAnalysis;
+      try {
+        parsed = JSON.parse(text) as MealAnalysis;
+      } catch {
+        logger.error("Unparseable model output", { text: text.slice(0, 500) });
+        throw new HttpsError("internal", "The analysis came back in an unexpected format.");
+      }
 
-    const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
-    let parsed: MealAnalysis;
-    try {
-      parsed = JSON.parse(text) as MealAnalysis;
-    } catch {
-      logger.error("Unparseable model output", { text: text.slice(0, 500) });
-      throw new HttpsError("internal", "The analysis came back in an unexpected format.");
-    }
-
-    return {
-      dishName: parsed.dishName.trim(),
-      notes: parsed.notes.trim(),
-      ingredients: parsed.ingredients
-        .filter((i) => i.name.trim().length > 0)
-        .map((i) => ({ name: i.name.trim(), confidence: Math.min(1, Math.max(0, i.confidence)), visible: i.visible })),
-    };
+      return {
+        dishName: parsed.dishName.trim(),
+        notes: parsed.notes.trim(),
+        ingredients: parsed.ingredients
+          .filter((i) => i.name.trim().length > 0)
+          .map((i) => ({ name: i.name.trim(), confidence: Math.min(1, Math.max(0, i.confidence)), visible: i.visible })),
+      };
+    });
   },
 );
 
@@ -190,7 +196,7 @@ interface BloodworkExtraction {
  * The user reviews and edits every row in the app before anything is saved.
  */
 export const extractBloodworkPanel = onCall(
-  { secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 300, memory: "1GiB", region: "us-central1" },
+  { secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 300, memory: "1GiB", region: "us-central1", enforceAppCheck: ENFORCE_APP_CHECK },
   async (request): Promise<BloodworkExtraction> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in to upload blood work.");
@@ -211,75 +217,79 @@ export const extractBloodworkPanel = onCall(
         ? ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: documentBase64 } } as const)
         : ({ type: "image", source: { type: "base64", media_type: mediaType as MediaType, data: documentBase64 } } as const);
 
-    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+    const uid = request.auth.uid;
+    await takeQuota(uid, "report");
+    return withRefund(uid, "report", async () => {
+      const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
 
-    let response;
-    try {
-      // Streamed: multi-page reports can take a while, and streaming avoids HTTP timeouts.
-      response = await client.beta.messages
-        .stream({
-          model: MODEL,
-          max_tokens: 32000,
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
-          output_config: {
-            // Transcribing numbers accurately matters more than latency here.
-            effort: "high",
-            format: { type: "json_schema", schema: BLOODWORK_SCHEMA },
-          },
-          system: BLOODWORK_SYSTEM_PROMPT,
-          messages: [
-            {
-              role: "user",
-              content: [source, { type: "text", text: "Extract the allergen-specific IgE results from this report." }],
+      let response;
+      try {
+        // Streamed: multi-page reports can take a while, and streaming avoids HTTP timeouts.
+        response = await client.beta.messages
+          .stream({
+            model: MODEL,
+            max_tokens: 32000,
+            betas: ["server-side-fallback-2026-07-01"],
+            fallbacks: "default",
+            output_config: {
+              // Transcribing numbers accurately matters more than latency here.
+              effort: "high",
+              format: { type: "json_schema", schema: BLOODWORK_SCHEMA },
             },
-          ],
-        })
-        .finalMessage();
-    } catch (err) {
-      if (err instanceof Anthropic.RateLimitError) {
-        throw new HttpsError("resource-exhausted", "Too many requests — try again in a moment.");
+            system: BLOODWORK_SYSTEM_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content: [source, { type: "text", text: "Extract the allergen-specific IgE results from this report." }],
+              },
+            ],
+          })
+          .finalMessage();
+      } catch (err) {
+        if (err instanceof Anthropic.RateLimitError) {
+          throw new HttpsError("resource-exhausted", "Too many requests — try again in a moment.");
+        }
+        if (err instanceof Anthropic.BadRequestError) {
+          logger.error("Claude rejected the report", { message: err.message });
+          throw new HttpsError("invalid-argument", "That document couldn't be read. Try a clearer photo or the original PDF.");
+        }
+        if (err instanceof Anthropic.APIError) {
+          logger.error("Claude API error", { status: err.status, message: err.message });
+          throw new HttpsError("unavailable", "Report reading is temporarily unavailable.");
+        }
+        throw err;
       }
-      if (err instanceof Anthropic.BadRequestError) {
-        logger.error("Claude rejected the report", { message: err.message });
-        throw new HttpsError("invalid-argument", "That document couldn't be read. Try a clearer photo or the original PDF.");
+
+      if (response.stop_reason === "refusal") {
+        throw new HttpsError("failed-precondition", "This document couldn't be read. Please enter the results manually.");
       }
-      if (err instanceof Anthropic.APIError) {
-        logger.error("Claude API error", { status: err.status, message: err.message });
-        throw new HttpsError("unavailable", "Report reading is temporarily unavailable.");
+      if (response.stop_reason === "max_tokens") {
+        throw new HttpsError("internal", "The report was too long to read in one go. Try uploading fewer pages.");
       }
-      throw err;
-    }
 
-    if (response.stop_reason === "refusal") {
-      throw new HttpsError("failed-precondition", "This document couldn't be read. Please enter the results manually.");
-    }
-    if (response.stop_reason === "max_tokens") {
-      throw new HttpsError("internal", "The report was too long to read in one go. Try uploading fewer pages.");
-    }
+      const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+      let parsed: BloodworkExtraction;
+      try {
+        parsed = JSON.parse(text) as BloodworkExtraction;
+      } catch {
+        logger.error("Unparseable model output", { text: text.slice(0, 500) });
+        throw new HttpsError("internal", "The report came back in an unexpected format.");
+      }
 
-    const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
-    let parsed: BloodworkExtraction;
-    try {
-      parsed = JSON.parse(text) as BloodworkExtraction;
-    } catch {
-      logger.error("Unparseable model output", { text: text.slice(0, 500) });
-      throw new HttpsError("internal", "The report came back in an unexpected format.");
-    }
-
-    return {
-      testDate: /^\d{4}-\d{2}-\d{2}$/.test(parsed.testDate.trim()) ? parsed.testDate.trim() : "",
-      labName: parsed.labName.trim(),
-      notes: parsed.notes.trim(),
-      results: parsed.results
-        .filter((r) => r.allergen.trim().length > 0 && Number.isFinite(r.value) && r.value >= 0)
-        .map((r) => ({
-          allergen: r.allergen.trim(),
-          value: r.value,
-          comparator: r.comparator,
-          unit: r.unit.trim(),
-          reportedClass: Number.isInteger(r.reportedClass) && r.reportedClass >= 0 && r.reportedClass <= 6 ? r.reportedClass : -1,
-        })),
-    };
+      return {
+        testDate: /^\d{4}-\d{2}-\d{2}$/.test(parsed.testDate.trim()) ? parsed.testDate.trim() : "",
+        labName: parsed.labName.trim(),
+        notes: parsed.notes.trim(),
+        results: parsed.results
+          .filter((r) => r.allergen.trim().length > 0 && Number.isFinite(r.value) && r.value >= 0)
+          .map((r) => ({
+            allergen: r.allergen.trim(),
+            value: r.value,
+            comparator: r.comparator,
+            unit: r.unit.trim(),
+            reportedClass: Number.isInteger(r.reportedClass) && r.reportedClass >= 0 && r.reportedClass <= 6 ? r.reportedClass : -1,
+          })),
+      };
+    });
   },
 );

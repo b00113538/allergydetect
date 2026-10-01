@@ -13,6 +13,12 @@ service cloud.firestore {
       }
     }
 
+    // Per-user daily AI usage counters. Written only by Cloud Functions (Admin SDK bypasses rules);
+    // clients can neither read nor reset them.
+    match /rateLimits/{uid} {
+      allow read, write: if false;
+    }
+
     // Public Dine Code snapshots. The document id is an unguessable 128-bit+ token, so the QR code
     // itself is the capability: anyone holding the URL may `get` it, nobody may `list`/query.
     match /dineCodes/{token} {
