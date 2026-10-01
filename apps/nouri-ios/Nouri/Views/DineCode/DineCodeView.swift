@@ -16,6 +16,7 @@ struct DineCodeView: View {
                 } else {
                     emptyState
                 }
+                PartnerOrderingTeaser()
             }
             .padding(20)
         }
