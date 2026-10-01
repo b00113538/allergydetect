@@ -96,16 +96,22 @@ Don't delete the reviewer account. If it's ever reset, sign up again and reload 
 
 ## Screenshots
 
-App Store Connect needs **6.9" iPhone** screenshots, 1320 × 2868 (iPhone 16 Pro Max / 17 Pro Max). One size is enough; smaller devices reuse them. Use 3 to 10 of them. Suggested order:
-1. Today, with meals and a check-in card
-2. Ingredient confirmation after a photo, showing allergen flags
-3. Insights → Food, with likely triggers and confidence
-4. Trigger detail ("the numbers")
-5. Insights → Blood work comparison
-6. Dine Code QR
-7. Insights → Skin
+These are generated automatically. **Actions → Nouri App Store screenshots → Run workflow** runs the
+`AppStoreScreenshots` UI test on a 6.9" iPhone simulator (1320 × 2868, the size App Store Connect requires; smaller
+iPhones reuse it). The test runs in demo mode (`-NouriScreenshots`: in-memory sample data, no permission prompts) with a
+9:41 status bar. The PNGs are pushed to the **`nouri-screenshots`** branch and also attached to the run.
+Upload them in file-name order:
 
-Easiest route: run the demo build in the iPhone 16 Pro Max simulator, load the sample history, and press ⌘S in Simulator to save each screen.
+1. Today: greeting, quick log, check-in card, recent activity
+2. Insights → Food: allergen groups and likely triggers
+3. Trigger detail: the numbers behind the score
+4. Insights → Blood work: test results compared with your logs
+5. Insights → Skin: products, fabrics and ingredient groups
+6. Log a meal: AI ingredient review with allergen flags
+7. Dine Code: the QR code restaurants scan
+
+The workflow also re-runs automatically whenever the screenshot test changes. To change what's shown, edit
+`NouriUITests/AppStoreScreenshots.swift` (the screens) or `AppState.screenshotDemo()` (the data).
 
 ## Release checklist
 

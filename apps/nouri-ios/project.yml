@@ -105,6 +105,18 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
+  # App Store screenshots (UI test). Kept out of the main scheme so regular CI stays fast.
+  NouriUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [NouriUITests]
+    dependencies:
+      - target: Nouri
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+
 schemes:
   Nouri:
     build:
@@ -113,3 +125,10 @@ schemes:
         NouriTests: [test]
     test:
       targets: [NouriTests]
+  NouriScreenshots:
+    build:
+      targets:
+        Nouri: all
+        NouriUITests: [test]
+    test:
+      targets: [NouriUITests]

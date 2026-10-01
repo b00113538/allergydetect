@@ -9,3 +9,5 @@ firebase/.firebaserc
 firebase/.firebase/
 .spm/
 xcodebuild.log
+screenshots/
+screenshots.log
