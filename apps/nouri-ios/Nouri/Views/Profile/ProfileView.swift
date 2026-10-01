@@ -161,7 +161,7 @@ struct TriggerRow: View {
                 Tag(text: trigger.status.label, color: trigger.status.color)
             }
             ConfidenceBar(value: trigger.confidence, tint: trigger.status.color)
-            Text("Confidence \(trigger.confidence.percentString) · symptoms after \(trigger.reactions) of \(trigger.exposures) meals")
+            Text("Confidence \(trigger.confidence.percentString) · symptoms after \(trigger.reactions) of \(trigger.exposures) \(trigger.domain == .food ? "meals" : "logs")")
                 .font(.caption)
                 .foregroundStyle(Color.nouriTextSecondary)
         }
