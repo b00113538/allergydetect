@@ -2,21 +2,31 @@ import "./admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { defineInt } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
-import { consume, limitMessage, refund, type QuotaKind, type QuotaState } from "./quotaLogic";
+import { consume, limitMessage, planFor, refund, type Plan, type QuotaKind, type QuotaState } from "./quotaLogic";
 
 // Daily per-user limits. To change them without touching code, set e.g. MEAL_PHOTO_DAILY_LIMIT=15 in
 // functions/.env (or .env.<project-id>) and redeploy.
-export const DAILY_LIMITS: Record<QuotaKind, ReturnType<typeof defineInt>> = {
-  mealPhoto: defineInt("MEAL_PHOTO_DAILY_LIMIT", { default: 12, description: "Meal photos analysed per user per UTC day" }),
-  label: defineInt("LABEL_DAILY_LIMIT", { default: 10, description: "Product/care labels read per user per UTC day" }),
-  report: defineInt("REPORT_DAILY_LIMIT", { default: 3, description: "Blood work reports read per user per UTC day" }),
+export const DAILY_LIMITS: Record<Plan, Record<QuotaKind, ReturnType<typeof defineInt>>> = {
+  free: {
+    mealPhoto: defineInt("MEAL_PHOTO_DAILY_LIMIT", { default: 12, description: "Free plan: meal photos per user per UTC day" }),
+    label: defineInt("LABEL_DAILY_LIMIT", { default: 10, description: "Free plan: product/care labels per user per UTC day" }),
+    report: defineInt("REPORT_DAILY_LIMIT", { default: 3, description: "Free plan: blood work reports per user per UTC day" }),
+  },
+  premium: {
+    mealPhoto: defineInt("PREMIUM_MEAL_PHOTO_DAILY_LIMIT", { default: 30, description: "Premium: meal photos per user per UTC day" }),
+    label: defineInt("PREMIUM_LABEL_DAILY_LIMIT", { default: 30, description: "Premium: product/care labels per user per UTC day" }),
+    report: defineInt("PREMIUM_REPORT_DAILY_LIMIT", { default: 10, description: "Premium: blood work reports per user per UTC day" }),
+  },
 };
 
 const doc = (uid: string) => getFirestore().collection("rateLimits").doc(uid);
 
-/** Takes one unit for `uid` or throws `resource-exhausted`. Call before the Claude request. */
-export async function takeQuota(uid: string, kind: QuotaKind): Promise<{ remaining: number; limit: number }> {
-  const limit = DAILY_LIMITS[kind].value();
+/**
+ * Takes one unit for `uid` or throws `resource-exhausted`. Call before the Claude request.
+ * `token` is the caller's decoded ID token (request.auth.token); its `plan` claim picks the limits.
+ */
+export async function takeQuota(uid: string, kind: QuotaKind, token?: Record<string, unknown>): Promise<{ remaining: number; limit: number }> {
+  const limit = DAILY_LIMITS[planFor(token)][kind].value();
   const decision = await getFirestore().runTransaction(async (tx) => {
     const snap = await tx.get(doc(uid));
     const result = consume(snap.data() as QuotaState | undefined, kind, limit, new Date());

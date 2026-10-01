@@ -1,6 +1,16 @@
 // Pure per-user daily quota logic — no Firebase imports, so it's unit-testable.
 
 export type QuotaKind = "mealPhoto" | "label" | "report";
+export type Plan = "free" | "premium";
+
+/**
+ * The user's plan, from the Firebase Auth custom claim `plan` (set server-side when a subscription is
+ * purchased, e.g. by a StoreKit / RevenueCat webhook calling `setCustomUserClaims(uid, { plan: "premium" })`).
+ * Anything else — including no claim — is free.
+ */
+export function planFor(token: Record<string, unknown> | undefined): Plan {
+  return token?.plan === "premium" ? "premium" : "free";
+}
 
 /** Stored at rateLimits/{uid} (clients can't read or write it; see firestore.rules). */
 export interface QuotaState {

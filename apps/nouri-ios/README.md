@@ -170,13 +170,16 @@ Food results of class 2 or higher are added to the Dine Code as "Positive blood 
   read or reset it, and it resets at midnight UTC. A request that fails on our side is refunded, and a user who hits
   the limit can still type the entry in by hand.
 
-| Feature | Param | Default |
+| Feature | Free (param, default) | Premium (param, default) |
 |---|---|---|
-| Meal photos | `MEAL_PHOTO_DAILY_LIMIT` | 12 |
-| Product / care labels | `LABEL_DAILY_LIMIT` | 10 |
-| Blood work reports | `REPORT_DAILY_LIMIT` | 3 |
+| Meal photos | `MEAL_PHOTO_DAILY_LIMIT`, 12 | `PREMIUM_MEAL_PHOTO_DAILY_LIMIT`, 30 |
+| Product / care labels | `LABEL_DAILY_LIMIT`, 10 | `PREMIUM_LABEL_DAILY_LIMIT`, 30 |
+| Blood work reports | `REPORT_DAILY_LIMIT`, 3 | `PREMIUM_REPORT_DAILY_LIMIT`, 10 |
 
 To change a limit, set it in `functions/.env` (e.g. `MEAL_PHOTO_DAILY_LIMIT=15`) and run `firebase deploy --only functions`.
+Premium is read from the Firebase Auth custom claim `plan: "premium"`. Nothing sets that claim yet; the future
+subscription flow will set it with `admin.auth().setCustomUserClaims(uid, { plan: "premium" })` when someone
+subscribes, and remove it when they cancel. Until then, every user is on the free limits.
 
 **Colours.** Colours are defined as asset-catalog colour sets, each with a light and a dark variant. Dark mode uses the
 brand spec (#10231E, #3E9B82, #CDAD5E, #E8EFE8). Light mode is cream, sage and gold. Each brand colour comes as a

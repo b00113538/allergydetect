@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { consume, limitMessage, refund, utcDay } from "../src/quotaLogic";
+import { consume, limitMessage, planFor, refund, utcDay } from "../src/quotaLogic";
 
 const morning = new Date("2026-10-01T08:00:00Z");
 const evening = new Date("2026-10-01T23:59:00Z");
@@ -46,4 +46,11 @@ test("refund gives one back, never below zero, and ignores old days", () => {
 test("limit message names the fallback", () => {
   assert.match(limitMessage("mealPhoto", 12), /12 meal photos.*typing the ingredients/);
   assert.match(limitMessage("report", 3), /3 report uploads.*by hand/);
+});
+
+test("plan comes only from the premium custom claim", () => {
+  assert.equal(planFor({ plan: "premium" }), "premium");
+  assert.equal(planFor({ plan: "PREMIUM" }), "free");
+  assert.equal(planFor({}), "free");
+  assert.equal(planFor(undefined), "free");
 });

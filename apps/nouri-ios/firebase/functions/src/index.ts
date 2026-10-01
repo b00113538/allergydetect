@@ -70,7 +70,7 @@ export const analyzeMealPhoto = onCall(
     }
 
     const uid = request.auth.uid;
-    await takeQuota(uid, "mealPhoto");
+    await takeQuota(uid, "mealPhoto", request.auth.token);
     return withRefund(uid, "mealPhoto", async () => {
       const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
 
@@ -218,7 +218,7 @@ export const extractBloodworkPanel = onCall(
         : ({ type: "image", source: { type: "base64", media_type: mediaType as MediaType, data: documentBase64 } } as const);
 
     const uid = request.auth.uid;
-    await takeQuota(uid, "report");
+    await takeQuota(uid, "report", request.auth.token);
     return withRefund(uid, "report", async () => {
       const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
 

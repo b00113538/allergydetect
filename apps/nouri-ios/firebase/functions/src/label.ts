@@ -31,7 +31,7 @@ export const readProductLabel = onCall(
     }
 
     const uid = request.auth.uid;
-    await takeQuota(uid, "label");
+    await takeQuota(uid, "label", request.auth.token);
     return withRefund(uid, "label", async () => {
       const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
       let response;
