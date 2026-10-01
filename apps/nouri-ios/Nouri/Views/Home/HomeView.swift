@@ -199,6 +199,7 @@ struct QuickLogButton: View {
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.nouriBorder))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("quicklog-\(title.lowercased())")
     }
 }
 

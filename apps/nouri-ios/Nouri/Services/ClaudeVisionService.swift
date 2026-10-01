@@ -90,6 +90,10 @@ struct ClaudeVisionService: IngredientRecognizing {
 struct DemoVisionService: IngredientRecognizing {
     func analyzeMeal(photo: UIImage) async throws -> MealAnalysis {
         try await Task.sleep(for: .seconds(1.2))
+        return Self.analysis
+    }
+
+    static let analysis: MealAnalysis = {
         let items: [(String, Double)] = [
             ("Grilled chicken", 0.92), ("Romaine lettuce", 0.88), ("Parmesan cheese", 0.81),
             ("Croutons", 0.77), ("Caesar dressing", 0.74), ("Lemon", 0.52), ("Black pepper", 0.45),
@@ -99,7 +103,7 @@ struct DemoVisionService: IngredientRecognizing {
             ingredients: items.map { AllergenDatabase.annotate(Ingredient(name: $0.0, confidence: $0.1, source: .ai)) },
             notes: "Demo mode — connect Firebase to analyse real photos."
         )
-    }
+    }()
 }
 
 extension String {

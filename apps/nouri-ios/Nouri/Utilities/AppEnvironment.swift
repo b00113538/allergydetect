@@ -8,6 +8,9 @@ enum AppEnvironment {
         Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil
 
     /// Where Dine Code QR codes point. Set `NouriDineCodeBaseURL` in Info.plist (see project.yml).
+    /// Launched by the screenshot UI test (`-NouriScreenshots`): in-memory demo data, no prompts.
+    static let isScreenshotMode = ProcessInfo.processInfo.arguments.contains("-NouriScreenshots")
+
     /// Email of the App Review demo account (`NouriReviewerEmail` in Info.plist; empty = none).
     static var reviewerEmail: String {
         (Bundle.main.object(forInfoDictionaryKey: "NouriReviewerEmail") as? String ?? "").trimmingCharacters(in: .whitespaces)

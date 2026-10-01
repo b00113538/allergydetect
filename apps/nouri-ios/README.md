@@ -67,6 +67,10 @@ way to put it on a phone for a pitch.
    (cd functions && npm install)
    firebase functions:secrets:set ANTHROPIC_API_KEY
    # Push: upload an APNs auth key (.p8) in Firebase console → Project settings → Cloud Messaging.
+   # App Check: Firebase console → App Check → register the iOS app with App Attest *and* DeviceCheck
+   #   (DeviceCheck needs a DeviceCheck key from Apple Developer → Keys). Enforce it for Storage, not Firestore.
+   #   For simulator/debug builds, copy the "App Check debug token" from the Xcode console into
+   #   App Check → Apps → Manage debug tokens.
    firebase deploy --only firestore,storage,functions,hosting
    ```
 4. Set `NouriDineCodeBaseURL` in `project.yml` to `https://<project-id>.web.app/d/` and regenerate.
@@ -154,6 +158,28 @@ compares the latest result per allergen with the food patterns and shows one of 
 - **Pattern, but blood test negative**: often an intolerance, not an IgE allergy.
 
 Food results of class 2 or higher are added to the Dine Code as "Positive blood test".
+
+**Abuse protection: App Check and daily limits.**
+- **App Check.** Every callable (meal photos, labels, blood work, account deletion) runs with
+  `enforceAppCheck`, so it only accepts requests from the genuine app.
+  - Real devices use App Attest, falling back to DeviceCheck.
+  - Simulator and debug builds use a debug token that you register once.
+  - The emergency off-switch is `ENFORCE_APP_CHECK=false` in `functions/.env`, followed by a redeploy.
+  - App Check is **not** enforced on Firestore, because the Dine Code page reads it from browsers without App Check.
+- **Daily limits.** Each user gets a daily allowance per AI feature, counted in `rateLimits/{uid}`. Clients can't
+  read or reset it, and it resets at midnight UTC. A request that fails on our side is refunded, and a user who hits
+  the limit can still type the entry in by hand.
+
+| Feature | Free (param, default) | Premium (param, default) |
+|---|---|---|
+| Meal photos | `MEAL_PHOTO_DAILY_LIMIT`, 12 | `PREMIUM_MEAL_PHOTO_DAILY_LIMIT`, 30 |
+| Product / care labels | `LABEL_DAILY_LIMIT`, 10 | `PREMIUM_LABEL_DAILY_LIMIT`, 30 |
+| Blood work reports | `REPORT_DAILY_LIMIT`, 3 | `PREMIUM_REPORT_DAILY_LIMIT`, 10 |
+
+To change a limit, set it in `functions/.env` (e.g. `MEAL_PHOTO_DAILY_LIMIT=15`) and run `firebase deploy --only functions`.
+Premium is read from the Firebase Auth custom claim `plan: "premium"`. Nothing sets that claim yet; the future
+subscription flow will set it with `admin.auth().setCustomUserClaims(uid, { plan: "premium" })` when someone
+subscribes, and remove it when they cancel. Until then, every user is on the free limits.
 
 **Colours.** Colours are defined as asset-catalog colour sets, each with a light and a dark variant. Dark mode uses the
 brand spec (#10231E, #3E9B82, #CDAD5E, #E8EFE8). Light mode is cream, sage and gold. Each brand colour comes as a

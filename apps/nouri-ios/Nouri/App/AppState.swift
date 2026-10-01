@@ -49,6 +49,7 @@ final class AppState: ObservableObject {
     }
 
     static func live() -> AppState {
+        if AppEnvironment.isScreenshotMode { return screenshotDemo() }
         let database: LocalDatabase
         do { database = try LocalDatabase.makeDefault() } catch { fatalError("Could not open local database: \(error)") }
         if AppEnvironment.isFirebaseConfigured {
@@ -443,6 +444,25 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Demo data
+
+    /// App Store screenshot state: an in-memory demo account with three weeks of sample history and a
+    /// lunch two hours ago (so the check-in card shows). Nothing touches disk, Firebase or permissions.
+    static func screenshotDemo() -> AppState {
+        let database: LocalDatabase
+        do { database = try LocalDatabase() } catch { fatalError("Could not open in-memory database: \(error)") }
+        let app = AppState(database: database, firebase: nil, vision: DemoVisionService())
+        let user = User(id: "screenshots", name: "Sam Rivera", email: "", dateOfBirth: nil, knownConditions: ["peanuts"],
+                        symptomHistory: nil, createdAt: .now)
+        try? database.save(user)
+        app.user = user
+        app.loadSampleData()
+        let lunch = DemoVisionService.analysis
+        try? database.save(MealEntry(userId: user.id, timestamp: .now.addingTimeInterval(-2 * 3600),
+                                     ingredients: lunch.ingredients, mealType: .lunch, dishName: lunch.dishName))
+        app.reload()
+        app.phase = .ready
+        return app
+    }
 
     /// Sample history is offered in demo mode, and in real builds only to the App Review account
     /// (so the reviewer sees populated insights). It's only offered while the account is empty.

@@ -34,6 +34,13 @@ struct MealLogFlowView: View {
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { analyze($0) }.ignoresSafeArea()
         }
+        .onAppear {
+            // Screenshot mode: skip the camera and show the review step with the demo analysis.
+            if AppEnvironment.isScreenshotMode && stage == .capture {
+                draft = MealDraft(dishName: DemoVisionService.analysis.dishName, ingredients: DemoVisionService.analysis.ingredients)
+                stage = .confirm
+            }
+        }
         .onChange(of: libraryItem) { _, item in
             guard let item else { return }
             Task {
